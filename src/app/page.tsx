@@ -10,6 +10,9 @@ interface AppConfig {
   location: string;
   minSalary: string;
   limitPerDay: number;
+  limitMode?: 'shared' | 'per_platform';
+  limitGlints?: number;
+  limitJobstreet?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
   debugTest: boolean;
@@ -240,9 +243,12 @@ export default function Home() {
     }
   };
 
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveStatus(null);
+    setIsSavingConfig(true);
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
@@ -251,13 +257,16 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        setSaveStatus({ type: 'success', message: 'Config saved successfully! Google Sheet initialized.' });
+        setSaveStatus({ type: 'success', message: '✅ Konfigurasi & Profil berhasil disimpan!' });
+        setTimeout(() => setSaveStatus(null), 4000);
         fetchAppliedHistory();
       } else {
-        setSaveStatus({ type: 'error', message: data.error || 'Failed to save config' });
+        setSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan konfigurasi' });
       }
     } catch (err: any) {
-      setSaveStatus({ type: 'error', message: err.message || 'Error occurred' });
+      setSaveStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan' });
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -558,7 +567,7 @@ export default function Home() {
               <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
                 Filter Pencarian Pekerjaan
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                     Kata Kunci Pekerjaan (Search Keywords)
@@ -586,19 +595,6 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Limit per Hari (Daily Limit)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={config.limitPerDay}
-                    onChange={(e) => setConfig({ ...config, limitPerDay: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                     Worker Konkuren (Workers / Tabs)
                   </label>
                   <input
@@ -613,25 +609,90 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Waktu Mulai Bekerja (Notice Period)
-                  </label>
-                  <select
-                    value={config.noticePeriod || 'Immediately'}
-                    onChange={(e) => setConfig({ ...config, noticePeriod: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="Immediately">Immediately / Secepatnya (Default)</option>
-                    <option value="2 weeks">2 Minggu (2 weeks)</option>
-                    <option value="1 month">1 Bulan (1 month)</option>
-                    <option value="2 months">2 Bulan (2 months)</option>
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Digunakan saat menjawab pertanyaan notice period / kapan bisa mulai bekerja di Glints & Jobstreet.
-                  </p>
+              {/* Skema Limit Per Day / Per Platform */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200">🎯 Pengaturan Kuota Limit Harian</h3>
+                    <p className="text-xs text-slate-400">Pilih bagaimana kuota limit lamaran dibagi antar platform.</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, limitMode: 'shared' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                        (config.limitMode || 'shared') === 'shared'
+                          ? 'bg-blue-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🔵 Kuota Gabungan (Shared)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, limitMode: 'per_platform' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                        config.limitMode === 'per_platform'
+                          ? 'bg-purple-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🟣 Kuota Per-Platform
+                    </button>
+                  </div>
                 </div>
+
+                {(config.limitMode || 'shared') === 'shared' ? (
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-48">
+                        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                          Total Limit Gabungan
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          value={config.limitPerDay}
+                          onChange={(e) => setConfig({ ...config, limitPerDay: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-400 mt-5">
+                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
+                        Limit Khusus Glints
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.limitGlints || 80}
+                        onChange={(e) => setConfig({ ...config, limitGlints: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitGlints || 80} lowongan di Glints.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-purple-400 uppercase tracking-wider mb-1">
+                        Limit Khusus Jobstreet
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.limitJobstreet || 75}
+                        onChange={(e) => setConfig({ ...config, limitJobstreet: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 font-bold"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitJobstreet || 75} lowongan di Jobstreet.</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2 pt-4">
@@ -694,9 +755,24 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded transition"
+                disabled={isSavingConfig}
+                className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                  isSavingConfig
+                    ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                }`}
               >
-                💾 Simpan Konfigurasi
+                {isSavingConfig ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Menyimpan Konfigurasi...</span>
+                  </>
+                ) : (
+                  <span>💾 Simpan Konfigurasi</span>
+                )}
               </button>
             </form>
           )}
@@ -784,6 +860,22 @@ export default function Home() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Waktu Mulai Bekerja (Notice Period)
+                  </label>
+                  <select
+                    value={config.noticePeriod || 'Immediately'}
+                    onChange={(e) => setConfig({ ...config, noticePeriod: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Immediately">Immediately / Secepatnya / ASAP (Default)</option>
+                    <option value="2 weeks">2 Minggu (2 weeks)</option>
+                    <option value="1 month">1 Bulan (1 month)</option>
+                    <option value="2 months">2 Bulan (2 months)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                     Nomor Telepon / WhatsApp
                   </label>
                   <input
@@ -849,19 +941,47 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Daftar Keahlian / Skills (Pisahkan dengan koma)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Daftar Keahlian / Skills &amp; Tools (Pisahkan dengan koma)
+                    </label>
+                    <div className="group relative cursor-pointer">
+                      <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-blue-900/60 text-blue-400 border border-blue-700/50">
+                        ?
+                      </span>
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 shadow-xl z-50 pointer-events-none">
+                        <p className="font-semibold text-blue-400 mb-1">💡 Cara Kerja Checklist Skills:</p>
+                        <p className="leading-relaxed">Isi semua keahlian &amp; tools yang Anda pakai (bahasa pemrograman, framework, database, alat analisis data, devops, dll).</p>
+                        <p className="mt-1.5 text-slate-400">• <strong className="text-purple-400">Jobstreet</strong>: Otomatis mencentang checkbox opsi yang cocok dengan daftar ini.</p>
+                        <p className="text-slate-400">• <strong className="text-emerald-400">Glints</strong>: Otomatis memilih tingkat &quot;Ahli / Advanced&quot;.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfig({
+                      ...config,
+                      skills: "JavaScript, TypeScript, Python, Java, C#, C++, PHP, Go, HTML, CSS, React, React.js, Next.js, Angular, Angular.js, Tailwind CSS, Bootstrap, jQuery, Framer Motion, Three.js, React Three Fiber, Drei, Node.js, Express.js, Fiber, GORM, REST API, RESTful API, Redis, RabbitMQ, Celery, Asynq, Message Queue, Kafka, PostgreSQL, MySQL, Supabase, Prisma, SQL, Docker, Nginx, PM2, Git, GitHub, GitHub Actions, Cloudflare, Let's Encrypt, Certbot, CI/CD, Postman, VS Code, Full Stack Development, Backend Development, Frontend Development, Web Development, API Development, Database Design, Microservices, Object-Oriented Programming, Asynchronous Programming, Blender, TouchDesigner, MediaPipe, Figma, ClickUp, Jira, Trello, Slack, Notion, Agile, Scrum, Problem Solving, Debugging"
+                    })}
+                    className="text-xs text-blue-400 hover:text-blue-300 underline font-medium"
+                  >
+                    Reset ke Template Lengkap
+                  </button>
+                </div>
                 <textarea
-                  rows={4}
+                  rows={5}
                   placeholder="Contoh: JavaScript, TypeScript, React, Next.js, Node.js, Express, Go, PostgreSQL, MySQL, RESTful API, Docker, Git"
                   value={config.skills || ''}
                   onChange={(e) => setConfig({ ...config, skills: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed"
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed font-mono"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  💡 Setiap keahlian yang ada di daftar ini akan otomatis dijawab <strong>&quot;Ahli / Advanced&quot;</strong> pada pertanyaan matriks keahlian Glints.
-                </p>
+                <div className="mt-1.5 p-2.5 bg-slate-950/80 border border-slate-800 rounded-md flex items-start gap-2 text-xs text-slate-400">
+                  <span className="text-blue-400 font-bold">ℹ️</span>
+                  <span>
+                    <strong>Tips Checklist:</strong> Bot mencocokkan pertanyaan kuesioner lowongan dengan daftar skill di atas. Semakin lengkap daftar skill &amp; tools yang Anda masukkan, semakin akurat bot mencentang opsi kuesioner kualifikasi secara otomatis.
+                  </span>
+                </div>
               </div>
 
               {saveStatus && (
@@ -878,9 +998,24 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded transition"
+                disabled={isSavingConfig}
+                className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                  isSavingConfig
+                    ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                }`}
               >
-                💾 Simpan Profil Pelamar
+                {isSavingConfig ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Menyimpan Profil Pelamar...</span>
+                  </>
+                ) : (
+                  <span>💾 Simpan Profil Pelamar</span>
+                )}
               </button>
             </form>
           )}

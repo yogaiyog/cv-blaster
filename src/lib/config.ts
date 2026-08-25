@@ -9,6 +9,9 @@ export interface AppConfig {
   location: string;
   minSalary: string;
   limitPerDay: number;
+  limitMode?: 'shared' | 'per_platform';
+  limitGlints?: number;
+  limitJobstreet?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
   debugTest: boolean;
@@ -37,7 +40,10 @@ const DEFAULT_CONFIG: AppConfig = {
   searchKeywords: '',
   location: '',
   minSalary: '',
-  limitPerDay: 20,
+  limitPerDay: 155,
+  limitMode: 'shared',
+  limitGlints: 80,
+  limitJobstreet: 75,
   enableGlints: true,
   enableJobstreet: true,
   debugTest: true,
@@ -48,7 +54,7 @@ const DEFAULT_CONFIG: AppConfig = {
   educationLevel: 'Sarjana (S1)',
   gpa: '3.75',
   yearsOfExperience: 3,
-  skills: 'JavaScript, TypeScript, React, React.js, Next.js, Node.js, Express.js, Go, Golang, HTML, HTML5, CSS, CSS3, Tailwind CSS, PostgreSQL, MySQL, RESTful API, Docker, Git',
+  skills: 'JavaScript, TypeScript, Python, Java, C#, C++, PHP, Go, HTML, CSS, React, React.js, Next.js, Angular, Angular.js, Tailwind CSS, Bootstrap, jQuery, Framer Motion, Three.js, React Three Fiber, Drei, Node.js, Express.js, Fiber, GORM, REST API, RESTful API, Redis, RabbitMQ, Celery, Asynq, Message Queue, Kafka, PostgreSQL, MySQL, Supabase, Prisma, SQL, Docker, Nginx, PM2, Git, GitHub, GitHub Actions, Cloudflare, Let\'s Encrypt, Certbot, CI/CD, Postman, VS Code, Full Stack Development, Backend Development, Frontend Development, Web Development, API Development, Database Design, Microservices, Object-Oriented Programming, Asynchronous Programming, Blender, TouchDesigner, MediaPipe, Figma, ClickUp, Jira, Trello, Slack, Notion, Agile, Scrum, Problem Solving, Debugging',
   portfolioUrl: 'https://github.com/yogaadi',
   githubUrl: 'https://github.com/yogaadi',
   linkedinUrl: 'https://www.linkedin.com',

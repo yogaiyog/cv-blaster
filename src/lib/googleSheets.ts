@@ -24,8 +24,24 @@ function getSheetsClient() {
   }
 }
 
-export async function getAppliedJobs(): Promise<Array<{ company: string; title: string; platform: string; jobUrl: string; date: string; status: string }>> {
+let inMemoryAppliedJobs: {
+  timestamp: number;
+  data: Array<{ company: string; title: string; platform: string; jobUrl: string; date: string; status: string }>;
+  urlSet: Set<string>;
+} | null = null;
+
+export async function getAppliedJobs(forceRefresh = false): Promise<Array<{ company: string; title: string; platform: string; jobUrl: string; date: string; status: string }>> {
   const config = getConfig();
+  if (!config.spreadsheetId || !config.googleCredentialsJson) {
+    return inMemoryAppliedJobs ? inMemoryAppliedJobs.data : [];
+  }
+
+  const now = Date.now();
+  // Return cached result if refreshed within the last 60 seconds unless forced
+  if (!forceRefresh && inMemoryAppliedJobs && now - inMemoryAppliedJobs.timestamp < 60000) {
+    return inMemoryAppliedJobs.data;
+  }
+
   try {
     const sheets = getSheetsClient();
     const response = await sheets.spreadsheets.values.get({
@@ -34,7 +50,7 @@ export async function getAppliedJobs(): Promise<Array<{ company: string; title: 
     });
 
     const rows = response.data.values || [];
-    return rows.map((row) => ({
+    const data = rows.map((row) => ({
       company: row[0] || '',
       title: row[1] || '',
       platform: row[2] || '',
@@ -42,13 +58,30 @@ export async function getAppliedJobs(): Promise<Array<{ company: string; title: 
       date: row[4] || '',
       status: row[5] || '',
     }));
+
+    const urlSet = new Set<string>();
+    data.forEach((j) => {
+      const cleaned = cleanJobUrl(j.jobUrl);
+      if (cleaned) urlSet.add(cleaned);
+    });
+
+    inMemoryAppliedJobs = {
+      timestamp: now,
+      data,
+      urlSet,
+    };
+
+    return data;
   } catch (error: any) {
-    // If the sheet doesn't exist or is empty/header not set, we'll try to initialize it.
+    // If rate limited (429) or network issue, fallback to existing in-memory cache gracefully
+    if (inMemoryAppliedJobs) {
+      return inMemoryAppliedJobs.data;
+    }
     if (error.message?.includes('Range') || error.status === 400) {
       await initializeSheet();
       return [];
     }
-    console.error('Error fetching applied jobs:', error);
+    console.error('Error fetching applied jobs (using local cache fallback):', error.message || error);
     return [];
   }
 }
@@ -65,13 +98,26 @@ export function cleanJobUrl(url: string): string {
 
 export async function addAppliedJob(job: { company: string; title: string; platform: string; jobUrl: string; status: string }) {
   const config = getConfig();
+  const cleanedUrl = cleanJobUrl(job.jobUrl);
+  const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+
+  // Update in-memory cache instantly
+  if (inMemoryAppliedJobs) {
+    if (cleanedUrl) inMemoryAppliedJobs.urlSet.add(cleanedUrl);
+    inMemoryAppliedJobs.data.unshift({
+      company: job.company,
+      title: job.title,
+      platform: job.platform,
+      jobUrl: cleanedUrl,
+      date: dateStr,
+      status: job.status,
+    });
+  }
+
   if (!config.googleCredentialsJson || !config.spreadsheetId) return;
 
   try {
     const sheets = getSheetsClient();
-    const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-    const cleanedUrl = cleanJobUrl(job.jobUrl);
-
     await sheets.spreadsheets.values.append({
       spreadsheetId: config.spreadsheetId,
       range: `${config.sheetName}!A2:F`,
@@ -88,7 +134,19 @@ export async function addAppliedJob(job: { company: string; title: string; platf
 export async function isJobAlreadyApplied(jobUrl: string): Promise<boolean> {
   if (!jobUrl) return false;
   const targetUrl = cleanJobUrl(jobUrl);
+
+  // Fast path: Check in-memory URL set in 0.001ms
+  const cache = inMemoryAppliedJobs;
+  if (cache) {
+    return cache.urlSet.has(targetUrl);
+  }
+
+  // First time: fetch & cache from Google Sheets
   const appliedJobs = await getAppliedJobs();
+  const freshCache = inMemoryAppliedJobs as { urlSet: Set<string> } | null;
+  if (freshCache) {
+    return freshCache.urlSet.has(targetUrl);
+  }
   return appliedJobs.some((job) => cleanJobUrl(job.jobUrl) === targetUrl);
 }
 

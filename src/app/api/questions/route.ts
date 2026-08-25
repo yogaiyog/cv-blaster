@@ -92,6 +92,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: 'rawCsv harus berupa string' }, { status: 400 });
       }
       fs.writeFileSync(CSV_PATH, rawCsv.trim() + '\n', 'utf8');
+      try {
+        const { invalidateKnowledgeBaseCache } = require('@/lib/questionAnswer');
+        invalidateKnowledgeBaseCache();
+      } catch {}
       return NextResponse.json({ success: true, message: 'CSV berhasil diperbarui!' });
     }
 
@@ -110,6 +114,10 @@ export async function POST(req: Request) {
       }
 
       fs.writeFileSync(CSV_PATH, lines.join('\n') + '\n', 'utf8');
+      try {
+        const { invalidateKnowledgeBaseCache } = require('@/lib/questionAnswer');
+        invalidateKnowledgeBaseCache();
+      } catch {}
       return NextResponse.json({ success: true, message: 'Pertanyaan berhasil disimpan!' });
     }
 

@@ -8,7 +8,18 @@ export interface BotMetrics {
   errorCount: number;
 }
 
-export async function runGlintsBot(page: any, config: any, onLog: (msg: string) => void): Promise<BotMetrics> {
+export interface SharedLimiter {
+  isLimitReached: (platformSuccess: number) => boolean;
+  onJobSuccess: () => void;
+  getTargetLimit: () => number;
+}
+
+export async function runGlintsBot(
+  page: any, 
+  config: any, 
+  onLog: (msg: string) => void,
+  sharedLimiter?: SharedLimiter
+): Promise<BotMetrics> {
   let successCount = 0;
   let alreadyAppliedCount = 0;
   let errorCount = 0;
@@ -217,296 +228,346 @@ export async function runGlintsBot(page: any, config: any, onLog: (msg: string) 
 
     const resultUrl = page.url();
     const resultTitle = await page.title();
-    onLog(`📍 Hasil Pencarian - Judul: "${resultTitle}"`);
-    onLog(`🔗 Hasil Pencarian - URL: ${resultUrl}`);
+    const baseSearchUrl = resultUrl.replace(/[?&]page=\d+/, '');
+    const urlSeparator = baseSearchUrl.includes('?') ? '&' : '?';
 
-    // Scroll halaman perlahan untuk memuat seluruh 30 kartu batch pertama
-    onLog('📜 Menggulir halaman ke bawah untuk merender batch 30 lowongan kerja pertama...');
-    await page.evaluate(async () => {
-      await new Promise<void>((resolve) => {
-        let totalHeight = 0;
-        const distance = 500;
-        const timer = setInterval(() => {
-          const scrollHeight = document.body.scrollHeight;
-          window.scrollBy(0, distance);
-          totalHeight += distance;
+    let currentPage = 1;
+    const targetLimit = sharedLimiter ? sharedLimiter.getTargetLimit() : (config.limitGlints || config.limitPerDay || 20);
+    const maxPages = Math.max(1, Math.ceil(targetLimit / 25) + 3);
 
-          if (totalHeight >= scrollHeight || totalHeight >= 6000) {
-            clearInterval(timer);
-            resolve();
-          }
-        }, 150);
-      });
-    });
-    await sleep(2000);
+    const checkLimitReached = () => sharedLimiter ? sharedLimiter.isLimitReached(successCount) : successCount >= targetLimit;
 
-    // Scroll kembali ke atas
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await sleep(1000);
+    const processedJobUrls = new Set<string>();
 
-    // Ekstraksi dan Mapping Lengkap Setiap Kartu Lowongan Kerja (Job Card)
-    onLog('🔍 Memetakan (mapping) seluruh kartu loker yang ada di halaman...');
-    const mappedJobs = await page.evaluate(() => {
-      const cardContainers = Array.from(document.querySelectorAll(
-        'div[class*="JobCardsc__JobcardContainer"], div[class*="CompactOpportunityCardsc__CompactJobCardWrapper"]'
-      ));
-
-      const results: Array<{
-        id: string;
-        title: string;
-        company: string;
-        location: string;
-        salary: string;
-        tags: string[];
-        url: string;
-        isAlreadyApplied: boolean;
-      }> = [];
-
-      for (const card of cardContainers) {
-        // 1. Judul & Link Loker
-        const titleAnchor = card.querySelector('h2 a[href*="/opportunities/jobs/"], a[class*="JobCardTitleNoStyleAnchor"]') as HTMLAnchorElement;
-        if (!titleAnchor) continue;
-
-        const rawHref = titleAnchor.getAttribute('href') || '';
-        if (!rawHref) continue;
-
-        // Buat absolute URL tanpa query params (?utm_...)
-        let cleanUrl = rawHref.startsWith('http') ? rawHref.split('?')[0] : `https://glints.com${rawHref.split('?')[0]}`;
-        const title = (titleAnchor.textContent || '').trim().replace(/\s+/g, ' ');
-
-        // 2. ID Pekerjaan
-        const gtmEl = card.querySelector('[data-gtm-job-id]');
-        const jobId = gtmEl ? gtmEl.getAttribute('data-gtm-job-id') || '' : cleanUrl.split('/').pop() || '';
-
-        // 3. Nama Perusahaan
-        const companyAnchor = card.querySelector('a[class*="CompanyLinkResolver"], [data-cy="company_name_job_card"] a');
-        const company = (companyAnchor?.textContent || 'Glints Partner').trim().replace(/\s+/g, ' ');
-
-        // 4. Lokasi
-        const locationWrapper = card.querySelector('div[class*="LocationWrapper"], div[class*="CardJobLocation"]');
-        const loc = (locationWrapper?.textContent || '').trim().replace(/\s+/g, ' ');
-
-        // 5. Gaji
-        const salaryEl = card.querySelector('[class*="NotDisclosedMessage"], [class*="JobTitleSalaryWrapper"] span');
-        const salary = (salaryEl?.textContent || 'Gaji Tidak Ditampilkan').trim().replace(/\s+/g, ' ');
-
-        // 6. Tags / Skills
-        const tagElements = Array.from(card.querySelectorAll('[class*="TagsWrapper"] [class*="TagContentWrapper"], [class*="TagContent-sc"]'));
-        const tags = tagElements.map(t => (t.textContent || '').trim()).filter(t => t.length > 0);
-
-        // 7. Cek apakah sudah pernah dilamar langsung dari tanda/badge pada kartu loker Glints
-        const isAlreadyApplied = !!card.querySelector('[class*="AppliedTagContainer"], [class*="AppliedIcon"]') ||
-                                 /Sudah dilamar|Applied/i.test(card.textContent || '');
-
-        results.push({
-          id: jobId,
-          title,
-          company,
-          location: loc,
-          salary,
-          tags,
-          url: cleanUrl,
-          isAlreadyApplied
-        });
+    while (currentPage <= maxPages && global.isBotRunning && !checkLimitReached()) {
+      if (currentPage > 1) {
+        const pageSearchUrl = `${baseSearchUrl}${urlSeparator}page=${currentPage}`;
+        onLog('==================================================');
+        onLog(`📄 Membuka Halaman Pencarian Glints ke-${currentPage}: ${pageSearchUrl}`);
+        try {
+          await page.goto(pageSearchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await sleep(3000);
+        } catch (navErr: any) {
+          onLog(`⚠️ Gagal membuka halaman ${currentPage}: ${navErr.message || navErr}`);
+          break;
+        }
       }
 
-      return results;
-    });
+      // Scroll halaman perlahan untuk memuat seluruh 30 kartu batch pada halaman ini
+      onLog(`📜 Menggulir halaman ke-${currentPage} untuk merender lowongan kerja...`);
+      await page.evaluate(async () => {
+        await new Promise<void>((resolve) => {
+          let totalHeight = 0;
+          const distance = 500;
+          const timer = setInterval(() => {
+            const scrollHeight = document.body.scrollHeight;
+            window.scrollBy(0, distance);
+            totalHeight += distance;
 
-    onLog(`📊 Berhasil memetakan ${mappedJobs.length} lowongan kerja dari halaman Glints:`);
-    mappedJobs.forEach((job: any, i: number) => {
-      const statusIcon = job.isAlreadyApplied ? '⏩ [Sudah Dilamar]' : '🆕 [Belum Dilamar]';
-      onLog(`   📌 [${i + 1}] ${statusIcon} "${job.title}" di "${job.company}"`);
-    });
+            if (totalHeight >= scrollHeight || totalHeight >= 7000) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 150);
+        });
+      });
+      await sleep(2000);
 
-    if (mappedJobs.length === 0) {
-      onLog('⚠️ Tidak ada lowongan yang dapat dibuka.');
-      return { successCount, alreadyAppliedCount, errorCount };
-    }
+      // Scroll kembali ke atas
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await sleep(1000);
 
-    // ----------------------------------------------------
-    // PROSES LAMARAN DENGAN WORKER CONCURRENCY
-    // ----------------------------------------------------
-    const numWorkers = Math.max(1, config.concurrency || 1);
-    const chunks: any[][] = Array.from({ length: numWorkers }, () => []);
-    mappedJobs.forEach((job: any, index: number) => {
-      chunks[index % numWorkers].push(job);
-    });
+      // Ekstraksi dan Mapping Lengkap Setiap Kartu Lowongan Kerja (Job Card)
+      onLog(`🔍 Memetakan (mapping) seluruh kartu loker pada halaman ke-${currentPage}...`);
+      const mappedJobs = await page.evaluate(() => {
+        const cardContainers = Array.from(document.querySelectorAll(
+          'div[class*="JobCardsc__JobcardContainer"], div[class*="CompactOpportunityCardsc__CompactJobCardWrapper"]'
+        ));
 
-    const browser = page.browser();
-    onLog(`🚀 Menjalankan ${numWorkers} worker concurrent untuk memproses lowongan Glints secara bersamaan...`);
+        const results: Array<{
+          id: string;
+          title: string;
+          company: string;
+          location: string;
+          salary: string;
+          tags: string[];
+          url: string;
+          isAlreadyApplied: boolean;
+        }> = [];
 
-    const workerPromises = chunks.map(async (chunkJobs, workerId) => {
-      if (chunkJobs.length === 0) return;
+        for (const card of cardContainers) {
+          // 1. Judul & Link Loker
+          const titleAnchor = card.querySelector('h2 a[href*="/opportunities/jobs/"], a[class*="JobCardTitleNoStyleAnchor"]') as HTMLAnchorElement;
+          if (!titleAnchor) continue;
 
-      const workerPrefix = numWorkers > 1 ? `[Worker ${workerId + 1}] ` : '';
-      const workerLog = (msg: string) => onLog(`${workerPrefix}${msg}`);
+          const rawHref = titleAnchor.getAttribute('href') || '';
+          if (!rawHref) continue;
 
-      workerLog(`👷 Worker ${workerId + 1} aktif memproses ${chunkJobs.length} lowongan kerja.`);
-      const workerPage = await browser.newPage();
-      await workerPage.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-      await workerPage.setViewport({ width: 1280, height: 800 });
+          // Buat absolute URL tanpa query params (?utm_...)
+          let cleanUrl = rawHref.startsWith('http') ? rawHref.split('?')[0] : `https://glints.com${rawHref.split('?')[0]}`;
+          const title = (titleAnchor.textContent || '').trim().replace(/\s+/g, ' ');
 
-      for (let i = 0; i < chunkJobs.length; i++) {
-        if (!global.isBotRunning) {
-          workerLog('🛑 Bot dihentikan oleh pengguna.');
-          break;
-        }
+          // 2. ID Pekerjaan
+          const gtmEl = card.querySelector('[data-gtm-job-id]');
+          const jobId = gtmEl ? gtmEl.getAttribute('data-gtm-job-id') || '' : cleanUrl.split('/').pop() || '';
 
-        if (successCount >= (config.limitPerDay || 20)) {
-          workerLog(`🎯 Batas harian tercapai (${successCount}/${config.limitPerDay}). Selesai.`);
-          break;
-        }
+          // 3. Nama Perusahaan
+          const companyAnchor = card.querySelector('a[class*="CompanyLinkResolver"], [data-cy="company_name_job_card"] a');
+          const company = (companyAnchor?.textContent || 'Glints Partner').trim().replace(/\s+/g, ' ');
 
-        const targetJob = chunkJobs[i];
-        workerLog('==================================================');
-        workerLog(`💼 Memproses Lowongan [${i + 1}/${chunkJobs.length}]: "${targetJob.title}"`);
-        workerLog(`🏢 Perusahaan: "${targetJob.company}"`);
-        workerLog(`📍 Lokasi: ${targetJob.location || 'Indonesia'} | 💰 ${targetJob.salary}`);
-        workerLog(`🔗 URL: ${targetJob.url}`);
+          // 4. Lokasi
+          const locationWrapper = card.querySelector('div[class*="LocationWrapper"], div[class*="CardJobLocation"]');
+          const loc = (locationWrapper?.textContent || '').trim().replace(/\s+/g, ' ');
 
-        // 1. Cek apakah kartu loker di Glints sudah berlabel "Sudah dilamar"
-        if (targetJob.isAlreadyApplied) {
-          workerLog(`⏩ Melewati "${targetJob.title}" - Sudah pernah dilamar di Glints (terdapat badge 'Sudah dilamar').`);
-          alreadyAppliedCount++;
-          continue;
-        }
+          // 5. Gaji
+          const salaryEl = card.querySelector('[class*="NotDisclosedMessage"], [class*="JobTitleSalaryWrapper"] span');
+          const salary = (salaryEl?.textContent || 'Gaji Tidak Ditampilkan').trim().replace(/\s+/g, ' ');
 
-        // 2. Cek apakah sudah ada di Google Sheets
-        const alreadyInSheets = await isJobAlreadyApplied(targetJob.url);
-        if (alreadyInSheets) {
-          workerLog(`⏩ Melewati "${targetJob.title}" - Sudah tercatat di riwayat Google Sheets.`);
-          alreadyAppliedCount++;
-          continue;
-        }
+          // 6. Tags / Skills
+          const tagElements = Array.from(card.querySelectorAll('[class*="TagsWrapper"] [class*="TagContentWrapper"], [class*="TagContent-sc"]'));
+          const tags = tagElements.map(t => (t.textContent || '').trim()).filter(t => t.length > 0);
 
-        // 3. Buka halaman detail loker
-        try {
-          await workerPage.goto(targetJob.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await sleep(1500);
+          // 7. Cek apakah sudah pernah dilamar langsung dari tanda/badge pada kartu loker Glints
+          const isAlreadyApplied = !!card.querySelector('[class*="AppliedTagContainer"], [class*="AppliedIcon"]') ||
+                                   /Sudah dilamar|Applied/i.test(card.textContent || '');
 
-          const jobPageTitle = await workerPage.title();
-          workerLog(`📍 Halaman Loker: "${jobPageTitle}"`);
-
-          // Ekstrak data resmi (Job Title & Company Name) & periksa tombol "Lamar" (data-testid="apply-start")
-          const detailInfo = await workerPage.evaluate(() => {
-            // 1. Ekstrak Job Title resmi
-            const titleEl = document.querySelector('h1[aria-label="Job Title"], h1[class*="JobOverViewTitle"], [class*="JobOverViewTitle"], h1');
-            const officialJobTitle = titleEl?.textContent?.trim() || '';
-
-            // 2. Ekstrak Company Name resmi
-            const companyEl = document.querySelector('div[class*="JobOverViewCompanyName"] a, [class*="JobOverViewCompanyName"] a, a[href*="/companies/"], [class*="JobOverViewCompanyName"]');
-            const officialCompanyName = companyEl?.textContent?.trim() || '';
-
-            const testIdBtn = document.querySelector('button[data-testid="apply-start"]') as HTMLButtonElement;
-            const allButtons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
-            const textMatchBtn = allButtons.find(b => /^(Lamar|Lamar Cepat|Apply|Quick Apply|Easy Apply|Apply Now)$/i.test((b.textContent || '').trim()));
-            const alreadyAppliedBtn = allButtons.find(b => /Lamaran Terkirim|Sudah Dilamar|Applied|Application Sent|Already Applied|Applied on/i.test((b.textContent || '').trim()));
-            const targetBtn = testIdBtn || textMatchBtn;
-
-            return {
-              officialJobTitle,
-              officialCompanyName,
-              hasTargetBtn: !!targetBtn,
-              isAlreadyApplied: !!alreadyAppliedBtn,
-              alreadyAppliedText: alreadyAppliedBtn ? (alreadyAppliedBtn.textContent || '').trim() : null,
-              buttonText: targetBtn ? (targetBtn.textContent || '').trim() : ''
-            };
+          results.push({
+            id: jobId,
+            title,
+            company,
+            location: loc,
+            salary,
+            tags,
+            url: cleanUrl,
+            isAlreadyApplied
           });
+        }
 
-          const activeJobTitle = detailInfo.officialJobTitle || targetJob.title;
-          const activeCompanyName = detailInfo.officialCompanyName || targetJob.company;
+        return results;
+      });
 
-          workerLog(`📋 Posisi Resmi: "${activeJobTitle}" | 🏢 Perusahaan: "${activeCompanyName}"`);
+      // Filter loker yang belum pernah diproses di sesi ini
+      const newJobsToProcess = mappedJobs.filter((j: any) => !processedJobUrls.has(j.url));
+      newJobsToProcess.forEach((j: any) => processedJobUrls.add(j.url));
 
-          if (detailInfo.isAlreadyApplied) {
-            workerLog(`⏩ Loker ini SUDAH DILAMAR pada halaman detail: "${detailInfo.alreadyAppliedText}". Melewati...`);
+      onLog(`📊 Halaman ${currentPage}: Ditemukan ${mappedJobs.length} loker (${newJobsToProcess.length} loker baru untuk diproses):`);
+      newJobsToProcess.forEach((job: any, i: number) => {
+        const statusIcon = job.isAlreadyApplied ? '⏩ [Sudah Dilamar]' : '🆕 [Belum Dilamar]';
+        onLog(`   📌 [${i + 1}] ${statusIcon} "${job.title}" di "${job.company}"`);
+      });
+
+      if (newJobsToProcess.length === 0) {
+        onLog(`⚠️ Tidak ada loker baru yang ditemukan pada halaman ke-${currentPage}. Mencoba lanjut atau selesai.`);
+        if (mappedJobs.length === 0) break;
+      }
+
+      // ----------------------------------------------------
+      // PROSES LAMARAN DENGAN WORKER CONCURRENCY
+      // ----------------------------------------------------
+      const numWorkers = Math.max(1, config.concurrency || 1);
+      const chunks: any[][] = Array.from({ length: numWorkers }, () => []);
+      newJobsToProcess.forEach((job: any, index: number) => {
+        chunks[index % numWorkers].push(job);
+      });
+
+      const browser = page.browser();
+      onLog(`🚀 Menjalankan ${numWorkers} worker concurrent untuk memproses ${newJobsToProcess.length} lowongan di halaman ${currentPage}...`);
+
+      const workerPromises = chunks.map(async (chunkJobs, workerId) => {
+        if (chunkJobs.length === 0) return;
+
+        const workerPrefix = numWorkers > 1 ? `[Worker ${workerId + 1}] ` : '';
+        const workerLog = (msg: string) => onLog(`${workerPrefix}${msg}`);
+
+        workerLog(`👷 Worker ${workerId + 1} aktif memproses ${chunkJobs.length} lowongan kerja.`);
+        const workerPage = await browser.newPage();
+        await workerPage.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        await workerPage.setViewport({ width: 1280, height: 800 });
+
+        for (let i = 0; i < chunkJobs.length; i++) {
+          if (!global.isBotRunning) {
+            workerLog('🛑 Bot dihentikan oleh pengguna.');
+            break;
+          }
+
+          if (checkLimitReached()) {
+            workerLog(`🎯 Batas kuota tercapai (${successCount}/${targetLimit}). Selesai.`);
+            break;
+          }
+
+          const targetJob = chunkJobs[i];
+          workerLog('==================================================');
+          workerLog(`💼 Memproses Lowongan [${i + 1}/${chunkJobs.length}]: "${targetJob.title}"`);
+          workerLog(`🏢 Perusahaan: "${targetJob.company}"`);
+          workerLog(`📍 Lokasi: ${targetJob.location || 'Indonesia'} | 💰 ${targetJob.salary}`);
+          workerLog(`🔗 URL: ${targetJob.url}`);
+
+          // 1. Cek apakah kartu loker di Glints sudah berlabel "Sudah dilamar"
+          if (targetJob.isAlreadyApplied) {
+            workerLog(`⏩ Melewati "${targetJob.title}" - Sudah pernah dilamar di Glints (terdapat badge 'Sudah dilamar').`);
             alreadyAppliedCount++;
             continue;
           }
 
-          if (!detailInfo.hasTargetBtn) {
-            workerLog(`⏩ Tidak ditemukan tombol "Lamar" internal (kemungkinan lowongan eksternal/ditutup). Melewati "${activeJobTitle}"...`);
-            await sleep(1500);
+          // 2. Cek apakah sudah ada di Google Sheets
+          const alreadyInSheets = await isJobAlreadyApplied(targetJob.url);
+          if (alreadyInSheets) {
+            workerLog(`⏩ Melewati "${targetJob.title}" - Sudah tercatat di riwayat Google Sheets.`);
+            alreadyAppliedCount++;
             continue;
           }
 
-          workerLog(`🔘 Mengklik tombol "${detailInfo.buttonText}" (data-testid="apply-start")...`);
-          await workerPage.evaluate(() => {
-            const btn = (document.querySelector('button[data-testid="apply-start"]') || 
-                         Array.from(document.querySelectorAll('button')).find(b => /^(Lamar|Lamar Cepat|Apply|Quick Apply|Easy Apply|Apply Now)$/i.test((b.textContent || '').trim()))) as HTMLElement;
-            if (btn) btn.click();
-          });
-
+          // 3. Buka halaman detail loker
           try {
-            await workerPage.waitForSelector('[data-testid="modal-wrapper"]', { visible: true, timeout: 8000 });
-            workerLog('🎉 Modal Lamaran Glints terbuka!');
-          } catch {
-            workerLog(`⏩ Modal lamaran tidak terbuka setelah klik "${detailInfo.buttonText}". Melewati loker "${activeJobTitle}"...`);
-            continue;
-          }
+            await workerPage.goto(targetJob.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await sleep(1500);
 
-          // Multi-Step Modal Questionnaire Solver Loop
-          let currentStep = 1;
-          const maxSteps = 15;
-          let reachedFinal = false;
+            const jobPageTitle = await workerPage.title();
+            workerLog(`📍 Halaman Loker: "${jobPageTitle}"`);
 
-          while (currentStep <= maxSteps && !reachedFinal) {
-            if (!global.isBotRunning) break;
+            // Ekstrak data resmi (Job Title & Company Name) & periksa tombol "Lamar" (data-testid="apply-start")
+            const detailInfo = await workerPage.evaluate(() => {
+              // 1. Ekstrak Job Title resmi
+              const titleEl = document.querySelector('h1[aria-label="Job Title"], h1[class*="JobOverViewTitle"], [class*="JobOverViewTitle"], h1');
+              const officialJobTitle = titleEl?.textContent?.trim() || '';
 
-            await sleep(2000);
+              // 2. Ekstrak Company Name resmi
+              const companyEl = document.querySelector('div[class*="JobOverViewCompanyName"] a, [class*="JobOverViewCompanyName"] a, a[href*="/companies/"], [class*="JobOverViewCompanyName"]');
+              const officialCompanyName = companyEl?.textContent?.trim() || '';
 
-            // 0. Auto-bypass popup peringatan kriteria (Bahasa Indonesia & English)
-            const warningHandled = await workerPage.evaluate(() => {
-              const warningModal = document.querySelector('[class*="WarningModalContainer"], [class*="WarningModal"]') ||
-                                   Array.from(document.querySelectorAll('[data-testid="modal-wrapper"]')).find(m => /Tidak memenuhi kriteria|belum sesuai|does not meet|doesn't meet|not eligible|criteria/i.test(m.textContent || ''));
-              if (!warningModal) return null;
+              const testIdBtn = document.querySelector('button[data-testid="apply-start"]') as HTMLButtonElement;
+              const allButtons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
+              const textMatchBtn = allButtons.find(b => /^(Lamar|Lamar Cepat|Apply|Quick Apply|Easy Apply|Apply Now)$/i.test((b.textContent || '').trim()));
+              const alreadyAppliedBtn = allButtons.find(b => /Lamaran Terkirim|Sudah Dilamar|Applied|Application Sent|Already Applied|Applied on/i.test((b.textContent || '').trim()));
+              const targetBtn = testIdBtn || textMatchBtn;
 
-              const continueBtn = Array.from(warningModal.querySelectorAll('button')).find(b => 
-                /^(Lanjutkan|Tetap Lamar|Lanjut|Continue|Proceed|Apply anyway)$/i.test((b.textContent || '').trim())
-              ) as HTMLElement;
-
-              if (continueBtn) {
-                continueBtn.click();
-                return true;
-              }
-              return false;
+              return {
+                officialJobTitle,
+                officialCompanyName,
+                hasTargetBtn: !!targetBtn,
+                isAlreadyApplied: !!alreadyAppliedBtn,
+                alreadyAppliedText: alreadyAppliedBtn ? (alreadyAppliedBtn.textContent || '').trim() : null,
+                buttonText: targetBtn ? (targetBtn.textContent || '').trim() : ''
+              };
             });
 
-            if (warningHandled) {
-              workerLog(`⚠️ Terdeteksi popup peringatan kriteria ("Profil belum sesuai / Doesn't match criteria"). Berhasil mengklik "Lanjutkan / Continue"...`);
-              await sleep(2000);
+            const activeJobTitle = detailInfo.officialJobTitle || targetJob.title;
+            const activeCompanyName = detailInfo.officialCompanyName || targetJob.company;
+
+            workerLog(`📋 Posisi Resmi: "${activeJobTitle}" | 🏢 Perusahaan: "${activeCompanyName}"`);
+
+            if (detailInfo.isAlreadyApplied) {
+              workerLog(`⏩ Loker ini SUDAH DILAMAR pada halaman detail: "${detailInfo.alreadyAppliedText}". Melewati...`);
+              alreadyAppliedCount++;
               continue;
             }
 
-            // Baca step & pertanyaan modal
-            const stepData = await workerPage.evaluate(() => {
-              const modal = document.querySelector('[data-testid="modal-wrapper"]');
-              if (!modal) return null;
+            if (!detailInfo.hasTargetBtn) {
+              workerLog(`⏩ Tidak ditemukan tombol "Lamar" internal (kemungkinan lowongan eksternal/ditutup). Melewati "${activeJobTitle}"...`);
+              await sleep(1500);
+              continue;
+            }
 
-              const stepLabel = modal.querySelector('[class*="ProgressBarLabel"]')?.textContent?.trim() || `${currentStep}/?`;
-              const headerTitle = modal.querySelector('[class*="ModalHeader"] [class*="Typography"]')?.textContent?.trim() || '';
-              const resumeName = modal.querySelector('[class*="ResumeFileName"]')?.textContent?.trim() || '';
+            workerLog(`🔘 Mengklik tombol "${detailInfo.buttonText}" (data-testid="apply-start")...`);
+            await workerPage.evaluate(() => {
+              const btn = (document.querySelector('button[data-testid="apply-start"]') || 
+                           Array.from(document.querySelectorAll('button')).find(b => /^(Lamar|Lamar Cepat|Apply|Quick Apply|Easy Apply|Apply Now)$/i.test((b.textContent || '').trim()))) as HTMLElement;
+              if (btn) btn.click();
+            });
 
-              const questions: Array<{
-                inputName: string;
-                question: string;
-                type: 'radiobutton' | 'checklist' | 'dropdown' | 'text';
-                options: string[];
-              }> = [];
+            try {
+              await workerPage.waitForSelector('[data-testid="modal-wrapper"]', { visible: true, timeout: 8000 });
+              workerLog('🎉 Modal Lamaran Glints terbuka!');
+            } catch {
+              workerLog(`⏩ Modal lamaran tidak terbuka setelah klik "${detailInfo.buttonText}". Melewati loker "${activeJobTitle}"...`);
+              continue;
+            }
 
-              // Matrix Sub-Questions (contoh: Skill Proficiency Matrix, Industry Matrix)
-              const subQuestionContainers = Array.from(modal.querySelectorAll(
-                'div[class*="SingleChoiceWithSubQuestionsFormsc__QuestionContainer"], div[class*="QuestionContainer-sc"]'
-              ));
+            // Multi-Step Modal Questionnaire Solver Loop
+            let currentStep = 1;
+            const maxSteps = 15;
+            let reachedFinal = false;
 
-              if (subQuestionContainers.length > 0) {
-                const parentHeader = modal.querySelector('div[class*="SingleChoiceWithSubQuestionsForm"] > p, [class*="ModalContent"] > div > p')?.textContent?.trim() || 'Keahlian';
-                for (const subContainer of subQuestionContainers) {
-                  const subTitle = subContainer.querySelector('p')?.textContent?.trim() || '';
-                  const radios = Array.from(subContainer.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+            while (currentStep <= maxSteps && !reachedFinal) {
+              if (!global.isBotRunning) break;
+
+              await sleep(2000);
+
+              // 0. Auto-bypass popup peringatan kriteria (Bahasa Indonesia & English)
+              const warningHandled = await workerPage.evaluate(() => {
+                const warningModal = document.querySelector('[class*="WarningModalContainer"], [class*="WarningModal"]') ||
+                                     Array.from(document.querySelectorAll('[data-testid="modal-wrapper"]')).find(m => /Tidak memenuhi kriteria|belum sesuai|does not meet|doesn't meet|not eligible|criteria/i.test(m.textContent || ''));
+                if (!warningModal) return null;
+
+                const continueBtn = Array.from(warningModal.querySelectorAll('button')).find(b => 
+                  /^(Lanjutkan|Tetap Lamar|Lanjut|Continue|Proceed|Apply anyway)$/i.test((b.textContent || '').trim())
+                ) as HTMLElement;
+
+                if (continueBtn) {
+                  continueBtn.click();
+                  return true;
+                }
+                return false;
+              });
+
+              if (warningHandled) {
+                workerLog(`⚠️ Terdeteksi popup peringatan kriteria ("Profil belum sesuai / Doesn't match criteria"). Berhasil mengklik "Lanjutkan / Continue"...`);
+                await sleep(2000);
+                continue;
+              }
+
+              // Baca step & pertanyaan modal
+              const stepData = await workerPage.evaluate(() => {
+                const modal = document.querySelector('[data-testid="modal-wrapper"]');
+                if (!modal) return null;
+
+                const stepLabel = modal.querySelector('[class*="ProgressBarLabel"]')?.textContent?.trim() || `${currentStep}/?`;
+                const headerTitle = modal.querySelector('[class*="ModalHeader"] [class*="Typography"]')?.textContent?.trim() || '';
+                const resumeName = modal.querySelector('[class*="ResumeFileName"]')?.textContent?.trim() || '';
+
+                const questions: Array<{
+                  inputName: string;
+                  question: string;
+                  type: 'radiobutton' | 'checklist' | 'dropdown' | 'text';
+                  options: string[];
+                }> = [];
+
+                // Matrix Sub-Questions (contoh: Skill Proficiency Matrix, Industry Matrix)
+                const subQuestionContainers = Array.from(modal.querySelectorAll(
+                  'div[class*="SingleChoiceWithSubQuestionsFormsc__QuestionContainer"], div[class*="QuestionContainer-sc"]'
+                ));
+
+                if (subQuestionContainers.length > 0) {
+                  const parentHeader = modal.querySelector('div[class*="SingleChoiceWithSubQuestionsForm"] > p, [class*="ModalContent"] > div > p')?.textContent?.trim() || 'Keahlian';
+                  for (const subContainer of subQuestionContainers) {
+                    const subTitle = subContainer.querySelector('p')?.textContent?.trim() || '';
+                    const radios = Array.from(subContainer.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+                    if (radios.length > 0) {
+                      const inputName = radios[0].name || '';
+                      const options: string[] = [];
+                      for (const rd of radios) {
+                        const labelWrapper = rd.closest('label') || rd.parentElement;
+                        const optText = (labelWrapper?.textContent || rd.value || '').trim();
+                        if (optText && !options.includes(optText)) {
+                          options.push(optText);
+                        }
+                      }
+                      questions.push({
+                        inputName,
+                        question: subTitle ? `${parentHeader} - ${subTitle}` : parentHeader,
+                        type: 'radiobutton',
+                        options
+                      });
+                    }
+                  }
+                } else {
+                  // Single Question Radio Groups
+                  const radios = Array.from(modal.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
                   if (radios.length > 0) {
+                    const questionEl = modal.querySelector('div[class*="SingleChoiceWithoutSubQuestionsForm"] p, [class*="ModalContent"] p');
+                    const questionText = questionEl?.textContent?.trim() || 'Pertanyaan Pilihan Tunggal';
                     const inputName = radios[0].name || '';
+
                     const options: string[] = [];
                     for (const rd of radios) {
                       const labelWrapper = rd.closest('label') || rd.parentElement;
@@ -515,26 +576,28 @@ export async function runGlintsBot(page: any, config: any, onLog: (msg: string) 
                         options.push(optText);
                       }
                     }
-                    questions.push({
-                      inputName,
-                      question: subTitle ? `${parentHeader} - ${subTitle}` : parentHeader,
-                      type: 'radiobutton',
-                      options
-                    });
+
+                    if (options.length > 0) {
+                      questions.push({
+                        inputName,
+                        question: questionText,
+                        type: 'radiobutton',
+                        options
+                      });
+                    }
                   }
                 }
-              } else {
-                // Single Question Radio Groups
-                const radios = Array.from(modal.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
-                if (radios.length > 0) {
-                  const questionEl = modal.querySelector('div[class*="SingleChoiceWithoutSubQuestionsForm"] p, [class*="ModalContent"] p');
-                  const questionText = questionEl?.textContent?.trim() || 'Pertanyaan Pilihan Tunggal';
-                  const inputName = radios[0].name || '';
+
+                // Checkbox Groups (Multi Choice)
+                const checkboxes = Array.from(modal.querySelectorAll('input[type="checkbox"]')) as HTMLInputElement[];
+                if (checkboxes.length > 0) {
+                  const questionEl = modal.querySelector('[class*="ModalContent"] p');
+                  const questionText = questionEl?.textContent?.trim() || 'Pertanyaan Pilihan Ganda';
 
                   const options: string[] = [];
-                  for (const rd of radios) {
-                    const labelWrapper = rd.closest('label') || rd.parentElement;
-                    const optText = (labelWrapper?.textContent || rd.value || '').trim();
+                  for (const cb of checkboxes) {
+                    const labelWrapper = cb.closest('label') || cb.parentElement;
+                    const optText = (labelWrapper?.textContent || cb.value || '').trim();
                     if (optText && !options.includes(optText)) {
                       options.push(optText);
                     }
@@ -542,249 +605,227 @@ export async function runGlintsBot(page: any, config: any, onLog: (msg: string) 
 
                   if (options.length > 0) {
                     questions.push({
-                      inputName,
+                      inputName: checkboxes[0].name || '',
                       question: questionText,
-                      type: 'radiobutton',
+                      type: 'checklist',
                       options
                     });
                   }
                 }
-              }
 
-              // Checkbox Groups (Multi Choice)
-              const checkboxes = Array.from(modal.querySelectorAll('input[type="checkbox"]')) as HTMLInputElement[];
-              if (checkboxes.length > 0) {
-                const questionEl = modal.querySelector('[class*="ModalContent"] p');
-                const questionText = questionEl?.textContent?.trim() || 'Pertanyaan Pilihan Ganda';
+                // Free Text Questions (Textarea atau Text Input, contoh: GPA/IPK, Expected Salary, Link Portofolio)
+                const textareas = Array.from(modal.querySelectorAll('textarea, input[type="text"]:not([data-cy*="search"])')) as (HTMLTextAreaElement | HTMLInputElement)[];
+                if (textareas.length > 0) {
+                  for (const txtArea of textareas) {
+                    const formContainer = txtArea.closest('div[class*="CustomPlainTextQuestionForm"], div[class*="FormContainer"], [class*="ModalContent"]');
+                    const qEl = formContainer?.querySelector('p') || modal.querySelector('[class*="ModalContent"] p');
+                    const questionText = qEl?.textContent?.trim() || 'Pertanyaan Isian';
+                    const inputName = txtArea.name || '';
 
-                const options: string[] = [];
-                for (const cb of checkboxes) {
-                  const labelWrapper = cb.closest('label') || cb.parentElement;
-                  const optText = (labelWrapper?.textContent || cb.value || '').trim();
-                  if (optText && !options.includes(optText)) {
-                    options.push(optText);
+                    questions.push({
+                      inputName,
+                      question: questionText,
+                      type: 'text',
+                      options: []
+                    });
                   }
                 }
 
-                if (options.length > 0) {
-                  questions.push({
-                    inputName: checkboxes[0].name || '',
-                    question: questionText,
-                    type: 'checklist',
-                    options
-                  });
-                }
+                const submitBtn = modal.querySelector('button[data-testid="apply-submit"]') as HTMLButtonElement;
+                const nextBtn = (submitBtn || modal.querySelector('button[data-testid="apply-next-step"]')) as HTMLButtonElement;
+                const nextBtnText = nextBtn ? (nextBtn.textContent || '').trim() : '';
+                const isSubmit = !!submitBtn || /^(Kirim|Kirim Lamaran|Submit|Submit Application|Send Application|Confirm)$/i.test(nextBtnText);
+                const isDisabled = nextBtn ? (nextBtn.disabled || nextBtn.getAttribute('aria-disabled') === 'true') : true;
+
+                return {
+                  stepLabel,
+                  headerTitle,
+                  resumeName,
+                  questions,
+                  hasNextBtn: !!nextBtn,
+                  nextBtnText,
+                  isSubmit,
+                  isDisabled
+                };
+              });
+
+              if (!stepData) {
+                workerLog('🏁 Modal lamaran ditutup atau selesai.');
+                reachedFinal = true;
+                break;
               }
 
-              // Free Text Questions (Textarea atau Text Input, contoh: GPA/IPK, Expected Salary, Link Portofolio)
-              const textareas = Array.from(modal.querySelectorAll('textarea, input[type="text"]:not([data-cy*="search"])')) as (HTMLTextAreaElement | HTMLInputElement)[];
-              if (textareas.length > 0) {
-                for (const txtArea of textareas) {
-                  const formContainer = txtArea.closest('div[class*="CustomPlainTextQuestionForm"], div[class*="FormContainer"], [class*="ModalContent"]');
-                  const qEl = formContainer?.querySelector('p') || modal.querySelector('[class*="ModalContent"] p');
-                  const questionText = qEl?.textContent?.trim() || 'Pertanyaan Isian';
-                  const inputName = txtArea.name || '';
+              workerLog(`📍 Progres Modal: Step ${stepData.stepLabel}`);
 
-                  questions.push({
-                    inputName,
-                    question: questionText,
-                    type: 'text',
-                    options: []
-                  });
-                }
-              }
-
-              const submitBtn = modal.querySelector('button[data-testid="apply-submit"]') as HTMLButtonElement;
-              const nextBtn = (submitBtn || modal.querySelector('button[data-testid="apply-next-step"]')) as HTMLButtonElement;
-              const nextBtnText = nextBtn ? (nextBtn.textContent || '').trim() : '';
-              const isSubmit = !!submitBtn || /^(Kirim|Kirim Lamaran|Submit|Submit Application|Send Application|Confirm)$/i.test(nextBtnText);
-              const isDisabled = nextBtn ? (nextBtn.disabled || nextBtn.getAttribute('aria-disabled') === 'true') : true;
-
-              return {
-                stepLabel,
-                headerTitle,
-                resumeName,
-                questions,
-                hasNextBtn: !!nextBtn,
-                nextBtnText,
-                isSubmit,
-                isDisabled
-              };
-            });
-
-            if (!stepData) {
-              workerLog('🏁 Modal lamaran ditutup atau selesai.');
-              reachedFinal = true;
-              break;
-            }
-
-            workerLog(`📍 Progres Modal: Step ${stepData.stepLabel}`);
-
-            // Jawab pertanyaan pada step ini
-            if (stepData.questions.length > 0) {
-              for (const qItem of stepData.questions) {
-                workerLog(`📋 Pertanyaan (${qItem.type.toUpperCase()}): "${qItem.question}"`);
-                if (qItem.options.length > 0) {
-                  workerLog(`   Opsi: [${qItem.options.join(' | ')}]`);
-                }
-
-                const chosenAnswers = await answerQuestion(qItem.question, qItem.options, qItem.type as any);
-                workerLog(`🤖 Keputusan Jawaban: [${chosenAnswers.join(' | ')}]`);
-                appendQuestionToCsv(qItem.question, qItem.type as any, qItem.options, chosenAnswers);
-
-                // Terapkan pilihan ke DOM Glints
-                await workerPage.evaluate((targetQ: any, answers: string[]) => {
-                  const modal = document.querySelector('[data-testid="modal-wrapper"]');
-                  if (!modal) return;
-
-                  if (targetQ.type === 'radiobutton' && answers.length > 0) {
-                    const targetAnswer = answers[0];
-                    const radioInputs = targetQ.inputName 
-                      ? Array.from(modal.querySelectorAll(`input[type="radio"][name="${targetQ.inputName}"]`)) as HTMLInputElement[]
-                      : Array.from(modal.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
-
-                    for (const rd of radioInputs) {
-                      const lbl = rd.closest('label') || rd.parentElement;
-                      const txt = (lbl?.textContent || rd.value || '').trim();
-                      if (txt === targetAnswer || txt.toLowerCase().includes(targetAnswer.toLowerCase()) || targetAnswer.toLowerCase().includes(txt.toLowerCase())) {
-                        (lbl || rd).click();
-                        rd.checked = true;
-                        rd.dispatchEvent(new Event('change', { bubbles: true }));
-                        break;
-                      }
-                    }
-                  } else if (targetQ.type === 'checklist') {
-                    const labels = Array.from(modal.querySelectorAll('label'));
-                    for (const lbl of labels) {
-                      const txt = (lbl.textContent || '').trim();
-                      const shouldCheck = answers.some(ans => txt === ans || txt.includes(ans));
-                      const cbInput = lbl.querySelector('input[type="checkbox"]') as HTMLInputElement;
-                      if (cbInput && shouldCheck !== cbInput.checked) {
-                        lbl.click();
-                      }
-                    }
-                  } else if (targetQ.type === 'text' && answers.length > 0) {
-                    const targetAnswer = answers[0];
-                    const txtInput = (targetQ.inputName
-                      ? modal.querySelector(`textarea[name="${targetQ.inputName}"], input[name="${targetQ.inputName}"]`)
-                      : modal.querySelector('textarea, input[type="text"]')) as (HTMLTextAreaElement | HTMLInputElement);
-
-                    if (txtInput) {
-                      txtInput.focus();
-                      const nativeTextAreaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-                      const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-
-                      if (txtInput instanceof HTMLTextAreaElement && nativeTextAreaSetter) {
-                        nativeTextAreaSetter.call(txtInput, targetAnswer);
-                      } else if (txtInput instanceof HTMLInputElement && nativeInputSetter) {
-                        nativeInputSetter.call(txtInput, targetAnswer);
-                      } else {
-                        txtInput.value = targetAnswer;
-                      }
-
-                      // Dispatch complete suite of React input/change events
-                      txtInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                      txtInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                      try {
-                        txtInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: targetAnswer }));
-                      } catch {}
-                      txtInput.blur();
-                    }
+              // Jawab pertanyaan pada step ini
+              if (stepData.questions.length > 0) {
+                for (const qItem of stepData.questions) {
+                  workerLog(`📋 Pertanyaan (${qItem.type.toUpperCase()}): "${qItem.question}"`);
+                  if (qItem.options.length > 0) {
+                    workerLog(`   Opsi: [${qItem.options.join(' | ')}]`);
                   }
-                }, qItem, chosenAnswers);
 
-                await sleep(1000);
+                  const chosenAnswers = await answerQuestion(qItem.question, qItem.options, qItem.type as any);
+                  workerLog(`🤖 Keputusan Jawaban: [${chosenAnswers.join(' | ')}]`);
+                  appendQuestionToCsv(qItem.question, qItem.type as any, qItem.options, chosenAnswers);
+
+                  // Terapkan pilihan ke DOM Glints
+                  await workerPage.evaluate((targetQ: any, answers: string[]) => {
+                    const modal = document.querySelector('[data-testid="modal-wrapper"]');
+                    if (!modal) return;
+
+                    if (targetQ.type === 'radiobutton' && answers.length > 0) {
+                      const targetAnswer = answers[0];
+                      const radioInputs = targetQ.inputName 
+                        ? Array.from(modal.querySelectorAll(`input[type="radio"][name="${targetQ.inputName}"]`)) as HTMLInputElement[]
+                        : Array.from(modal.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+
+                      for (const rd of radioInputs) {
+                        const lbl = rd.closest('label') || rd.parentElement;
+                        const txt = (lbl?.textContent || rd.value || '').trim();
+                        if (txt === targetAnswer || txt.toLowerCase().includes(targetAnswer.toLowerCase()) || targetAnswer.toLowerCase().includes(txt.toLowerCase())) {
+                          (lbl || rd).click();
+                          rd.checked = true;
+                          rd.dispatchEvent(new Event('change', { bubbles: true }));
+                          break;
+                        }
+                      }
+                    } else if (targetQ.type === 'checklist') {
+                      const labels = Array.from(modal.querySelectorAll('label'));
+                      for (const lbl of labels) {
+                        const txt = (lbl.textContent || '').trim();
+                        const shouldCheck = answers.some(ans => txt === ans || txt.includes(ans));
+                        const cbInput = lbl.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                        if (cbInput && shouldCheck !== cbInput.checked) {
+                          lbl.click();
+                        }
+                      }
+                    } else if (targetQ.type === 'text' && answers.length > 0) {
+                      const targetAnswer = answers[0];
+                      const txtInput = (targetQ.inputName
+                        ? modal.querySelector(`textarea[name="${targetQ.inputName}"], input[name="${targetQ.inputName}"]`)
+                        : modal.querySelector('textarea, input[type="text"]')) as (HTMLTextAreaElement | HTMLInputElement);
+
+                      if (txtInput) {
+                        txtInput.focus();
+                        const nativeTextAreaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+                        const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+                        if (txtInput instanceof HTMLTextAreaElement && nativeTextAreaSetter) {
+                          nativeTextAreaSetter.call(txtInput, targetAnswer);
+                        } else if (txtInput instanceof HTMLInputElement && nativeInputSetter) {
+                          nativeInputSetter.call(txtInput, targetAnswer);
+                        } else {
+                          txtInput.value = targetAnswer;
+                        }
+
+                        // Dispatch complete suite of React input/change events
+                        txtInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                        txtInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        try {
+                          txtInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: targetAnswer }));
+                        } catch {}
+                        txtInput.blur();
+                      }
+                    }
+                  }, qItem, chosenAnswers);
+
+                  await sleep(1000);
+                }
               }
+
+              // Cek apakah step terakhir
+              const isLastStepIndicator = /^(\d+)\/\1$/.test(stepData.stepLabel.replace(/\s+/g, ''));
+              if (stepData.isSubmit || isLastStepIndicator) {
+                if (config.debugTest) {
+                  workerLog(`🏁 [DEBUG MODE] Seluruh pertanyaan (${stepData.stepLabel}) selesai diisi. Tombol "Kirim" terdeteksi.`);
+                  workerLog(`   🛡️ Simulasi berhasil (Lamaran tidak dikirim ke server).`);
+
+                  // 1. Klik tombol X (Close)
+                  await workerPage.evaluate(() => {
+                    const closeBtn = document.querySelector('button[data-testid="modal-close-btn"]') as HTMLElement;
+                    if (closeBtn) closeBtn.click();
+                  });
+                  await sleep(800);
+
+                  // 2. Klik konfirmasi popup "Hapus Lamaran Pekerjaanmu? -> Batalkan tanpa menyimpan"
+                  await workerPage.evaluate(() => {
+                    const confirmModal = document.querySelector('[class*="CloseModalConfirmation"], [class*="ModalContainer"]') || document.body;
+                    const discardBtn = Array.from(confirmModal.querySelectorAll('button')).find(b => 
+                      /^(Batalkan tanpa menyimpan|Batalkan|Discard without saving|Discard)$/i.test((b.textContent || '').trim())
+                    ) as HTMLElement;
+                    if (discardBtn) discardBtn.click();
+                  });
+                  await sleep(800);
+
+                  await addAppliedJob({
+                    company: activeCompanyName,
+                    title: activeJobTitle,
+                    platform: 'Glints',
+                    jobUrl: targetJob.url,
+                    status: 'Dry-run Sim'
+                  });
+
+                  workerLog(`📝 [Dry-run Sim] Data simulasi "${activeCompanyName}" (${activeJobTitle}) dicatat ke Google Sheets!`);
+                  successCount++;
+                  if (sharedLimiter) sharedLimiter.onJobSuccess();
+                  reachedFinal = true;
+                  break;
+                } else {
+                  workerLog(`🚀 Mengirim Lamaran Glints ("${stepData.nextBtnText}")...`);
+                  await workerPage.evaluate(() => {
+                    const submitBtn = (document.querySelector('button[data-testid="apply-submit"]') ||
+                                       document.querySelector('button[data-testid="apply-next-step"]')) as HTMLElement;
+                    if (submitBtn) submitBtn.click();
+                  });
+                  await sleep(3000);
+
+                  await addAppliedJob({
+                    company: activeCompanyName,
+                    title: activeJobTitle,
+                    platform: 'Glints',
+                    jobUrl: targetJob.url,
+                    status: 'Applied'
+                  });
+
+                  workerLog(`🎉 Lamaran ke "${activeCompanyName}" (${activeJobTitle}) berhasil dikirim & disimpan ke Google Sheets!`);
+                  successCount++;
+                  if (sharedLimiter) sharedLimiter.onJobSuccess();
+                  reachedFinal = true;
+                  break;
+                }
+              }
+
+              // Klik Selanjutnya
+              workerLog(`👉 Mengklik tombol "${stepData.nextBtnText || 'Selanjutnya'}"...`);
+              await workerPage.evaluate(() => {
+                const nextBtn = (document.querySelector('button[data-testid="apply-next-step"]') ||
+                                 document.querySelector('button[data-testid="apply-submit"]')) as HTMLElement;
+                if (nextBtn) {
+                  nextBtn.removeAttribute('disabled');
+                  nextBtn.click();
+                }
+              });
+
+              await sleep(2500);
+              currentStep++;
             }
 
-            // Cek apakah step terakhir
-            const isLastStepIndicator = /^(\d+)\/\1$/.test(stepData.stepLabel.replace(/\s+/g, ''));
-            if (stepData.isSubmit || isLastStepIndicator) {
-              if (config.debugTest) {
-                workerLog(`🏁 [DEBUG MODE] Seluruh pertanyaan (${stepData.stepLabel}) selesai diisi. Tombol "Kirim" terdeteksi.`);
-                workerLog(`   🛡️ Simulasi berhasil (Lamaran tidak dikirim ke server).`);
-
-                // 1. Klik tombol X (Close)
-                await workerPage.evaluate(() => {
-                  const closeBtn = document.querySelector('button[data-testid="modal-close-btn"]') as HTMLElement;
-                  if (closeBtn) closeBtn.click();
-                });
-                await sleep(800);
-
-                // 2. Klik konfirmasi popup "Hapus Lamaran Pekerjaanmu? -> Batalkan tanpa menyimpan"
-                await workerPage.evaluate(() => {
-                  const confirmModal = document.querySelector('[class*="CloseModalConfirmation"], [class*="ModalContainer"]') || document.body;
-                  const discardBtn = Array.from(confirmModal.querySelectorAll('button')).find(b => 
-                    /^(Batalkan tanpa menyimpan|Batalkan|Discard without saving|Discard)$/i.test((b.textContent || '').trim())
-                  ) as HTMLElement;
-                  if (discardBtn) discardBtn.click();
-                });
-                await sleep(800);
-
-                await addAppliedJob({
-                  company: activeCompanyName,
-                  title: activeJobTitle,
-                  platform: 'Glints',
-                  jobUrl: targetJob.url,
-                  status: 'Dry-run Sim'
-                });
-
-                workerLog(`📝 [Dry-run Sim] Data simulasi "${activeCompanyName}" (${activeJobTitle}) dicatat ke Google Sheets!`);
-                successCount++;
-                reachedFinal = true;
-                break;
-              } else {
-                workerLog(`🚀 Mengirim Lamaran Glints ("${stepData.nextBtnText}")...`);
-                await workerPage.evaluate(() => {
-                  const submitBtn = (document.querySelector('button[data-testid="apply-submit"]') ||
-                                     document.querySelector('button[data-testid="apply-next-step"]')) as HTMLElement;
-                  if (submitBtn) submitBtn.click();
-                });
-                await sleep(3000);
-
-                await addAppliedJob({
-                  company: activeCompanyName,
-                  title: activeJobTitle,
-                  platform: 'Glints',
-                  jobUrl: targetJob.url,
-                  status: 'Applied'
-                });
-
-                workerLog(`🎉 Lamaran ke "${activeCompanyName}" (${activeJobTitle}) berhasil dikirim & disimpan ke Google Sheets!`);
-                successCount++;
-                reachedFinal = true;
-                break;
-              }
-            }
-
-            // Klik Selanjutnya
-            workerLog(`👉 Mengklik tombol "${stepData.nextBtnText || 'Selanjutnya'}"...`);
-            await workerPage.evaluate(() => {
-              const nextBtn = (document.querySelector('button[data-testid="apply-next-step"]') ||
-                               document.querySelector('button[data-testid="apply-submit"]')) as HTMLElement;
-              if (nextBtn) {
-                nextBtn.removeAttribute('disabled');
-                nextBtn.click();
-              }
-            });
-
-            await sleep(2500);
-            currentStep++;
+            await sleep(1000);
+          } catch (jobErr: any) {
+            workerLog(`❌ Terjadi error saat memproses loker "${targetJob.title}": ${jobErr.message || jobErr}`);
+            errorCount++;
           }
-
-          await sleep(1000);
-        } catch (jobErr: any) {
-          workerLog(`❌ Terjadi error saat memproses loker "${targetJob.title}": ${jobErr.message || jobErr}`);
-          errorCount++;
         }
-      }
 
-      try {
-        await workerPage.close();
-      } catch {}
-    });
+        try {
+          await workerPage.close();
+        } catch {}
+      });
 
-    await Promise.all(workerPromises);
+      await Promise.all(workerPromises);
+      currentPage++;
+    }
   } catch (err: any) {
     onLog(`❌ Terjadi kesalahan pada alur pencarian Glints: ${err.message || err}`);
   }

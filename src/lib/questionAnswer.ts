@@ -419,13 +419,28 @@ function tryRegexAnswer(
     return profile.wantDefaultResume ? [options[0]] : [];
   }
 
-  // Tools/technology/skills/languages checklist (multi-select)
-  if (type === "checklist" && /revision control|tools|technolog|skill|kemampuan|language|bahasa|program/i.test(q)) {
-    const allKnown = [...profile.knownTools, ...dynamicSkills].map(s => s.toLowerCase());
-    const matches = options.filter((o) =>
-      allKnown.some((tool) => o.toLowerCase().includes(tool))
-    );
-    return matches.length > 0 ? matches : [options[options.length - 1]]; // "None of these" is usually last
+  // Tools/technology/skills/languages/data analysis checklist (multi-select)
+  if (type === "checklist" && /revision control|tools|alat|technolog|skill|kemampuan|language|bahasa|program|analisis|data|software|aplikasi/i.test(q)) {
+    const allKnown = [...profile.knownTools, ...dynamicSkills].map(s => s.toLowerCase().trim());
+    const matches = options.filter((o) => {
+      const optLower = o.toLowerCase().trim();
+      if (/tidak satupun|none of the above|none/i.test(optLower)) return false;
+      return allKnown.some((tool) => {
+        if (tool.length <= 2) {
+          // Exact match for short names like "C", "R", "Go"
+          return optLower === tool || optLower.split(/\s+/).includes(tool);
+        }
+        return optLower.includes(tool) || tool.includes(optLower);
+      });
+    });
+
+    if (matches.length > 0) {
+      return matches;
+    }
+    
+    // If no tools match, pick "Tidak satupun" / "None of these"
+    const noneOption = options.find(o => /tidak satupun|none|tidak ada/i.test(o));
+    return noneOption ? [noneOption] : [options[options.length - 1]];
   }
 
   // Skill proficiency rating question (Glints matrix sub-questions: Tidak Berpengalaman / Dasar / Menengah / Ahli)
@@ -482,6 +497,19 @@ function tryRegexAnswer(
     return [profile.portfolio || "https://github.com/yogaadi"];
   }
 
+  // Pertanyaan Kesiapan Mulai Bekerja (Notice Period / ASAP / Kapan Bisa Bergabung)
+  if (/notice period|notice periode|asap|kapan bisa mulai|kapan bisa bergabung|join immediately|start immediately|ketersediaan mulai|kapan bersedia|available to start|waktu mulai bekerja/i.test(q)) {
+    const notice = profile.noticePeriod || "Immediately";
+    if (options.length > 0) {
+      const match = options.find(o => /immediately|secepatnya|asap|segera|1 month|1 bulan/i.test(o));
+      if (match) return [match];
+    }
+    if (/asap|immediately|segera/i.test(notice)) {
+      return ["Saya bersedia untuk segera bergabung (ASAP / Immediately)."];
+    }
+    return [notice];
+  }
+
   // Pertanyaan Tahun Pengalaman jika open text
   if (/experience|pengalaman/i.test(q) && (options.length === 0 || type === "text")) {
     return [String(profile.defaultExperienceYears || 3)];
@@ -520,7 +548,7 @@ Reply with a concise, highly professional, direct answer (1-2 sentences maximum,
 
     try {
       if (process.env.GEMINI_API_KEY) {
-        const model = ai.getGenerativeModel({ model: "gemini-3.6-flash" });
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent(prompt);
         const text = (result.response.text() || "").trim();
         if (text) return [text];
@@ -529,6 +557,10 @@ Reply with a concise, highly professional, direct answer (1-2 sentences maximum,
 
     // Smart context-aware fallback based on question intent
     const lowerQ = question.toLowerCase();
+    if (/notice|asap|join|mulai kerja|bergabung/i.test(lowerQ)) {
+      const notice = profile.noticePeriod || "Immediately";
+      return [/asap|immediately|segera/i.test(notice) ? "Saya bersedia untuk segera bergabung (ASAP / Immediately)." : notice];
+    }
     if (/english|bahasa inggris|rate|1 to 10/i.test(lowerQ)) return ["8"];
     if (/gpa|ipk/i.test(lowerQ)) return [profile.gpa || "3.75"];
     if (/salary|gaji/i.test(lowerQ)) return [String(profile.expectedMonthlySalaryIDR || 8000000)];
@@ -536,7 +568,7 @@ Reply with a concise, highly professional, direct answer (1-2 sentences maximum,
     if (/why|alasan|describe|ceritakan|jelaskan|introduce/i.test(lowerQ)) {
       return ["I have 3+ years of experience as a Full Stack Developer specializing in React, Next.js, Node.js, TypeScript, and PostgreSQL building scalable applications."];
     }
-    return ["8"];
+    return ["Saya bersedia untuk segera bergabung (ASAP / Immediately)."];
   }
 
   const multiSelect = type === "checklist";
@@ -558,13 +590,21 @@ Allowed options (copy chosen ones verbatim): ${options.map((o) => `"${o}"`).join
 
 Reply with ONLY the chosen option(s), copied exactly from the list. If choosing multiple, separate them with " || ". Nothing else.`;
 
-  const model = ai.getGenerativeModel({ model: "gemini-3.6-flash" });
-  const result = await model.generateContent(prompt);
-  const text = (result.response.text() || "").trim();
+  try {
+    if (process.env.GEMINI_API_KEY) {
+      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(prompt);
+      const text = (result.response.text() || "").trim();
 
-  const picked = text.split("||").map((s: string) => s.trim());
-  const valid = picked.filter((p: string) => options.includes(p));
-  return valid.length > 0 ? valid : [options[0]];
+      const picked = text.split("||").map((s: string) => s.trim());
+      const valid = picked.filter((p: string) => options.includes(p));
+      if (valid.length > 0) return valid;
+    }
+  } catch {}
+
+  // Smart options fallback
+  const firstMatch = options.find(o => /^(ya|yes|setuju|agree|fluent|mahir|sarjana|s1|full-time|wfo|hybrid|remote)$/i.test(o.trim()));
+  return [firstMatch || options[0] || ""];
 }
 
 // ---------------------------------------------------------------------------
@@ -615,40 +655,101 @@ async function main() {
   console.log(`Written to ${outPath}`);
 }
 
-// Search local imploye-question.csv for matching question first (Knowledge Base Cache)
-function getPreAnsweredQuestion(questionText: string, options: string[]): string[] | null {
+// ---------------------------------------------------------------------------
+// 5. In-Memory Knowledge Base Cache (High-Performance RAM Lookup)
+// ---------------------------------------------------------------------------
+
+interface CachedQuestion {
+  rawQuestion: string;
+  normalized: string;
+  words: Set<string>;
+  type: string;
+  options: string[];
+  answers: string[];
+}
+
+let memoryCache: {
+  mtimeMs: number;
+  items: CachedQuestion[];
+} | null = null;
+
+export function invalidateKnowledgeBaseCache() {
+  memoryCache = null;
+}
+
+export function getKnowledgeBase(): CachedQuestion[] {
   const csvPath = path.join(process.cwd(), 'public', 'imploye-question.csv');
-  if (!fs.existsSync(csvPath)) return null;
+  if (!fs.existsSync(csvPath)) return [];
 
   try {
+    const stats = fs.statSync(csvPath);
+    if (memoryCache && memoryCache.mtimeMs === stats.mtimeMs) {
+      return memoryCache.items;
+    }
+
     const content = fs.readFileSync(csvPath, 'utf8');
-    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length <= 1) return null;
+    const records: string[][] = parse(content, {
+      columns: false,
+      skip_empty_lines: true,
+      relax_column_count: true,
+      relax_quotes: true,
+    });
 
-    const parseCsvLine = (line: string): string[] => {
-      const result: string[] = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (char === ',' && !inQuotes) {
-          result.push(current);
-          current = '';
-        } else {
-          current += char;
-        }
+    const items: CachedQuestion[] = [];
+    for (let i = 1; i < records.length; i++) {
+      const cols = records[i];
+      if (!cols || cols.length < 2) continue;
+
+      let q = '';
+      let type = '';
+      let optionsRaw = '';
+      let answerRaw = '';
+
+      if (cols.length >= 4) {
+        q = cols[0] || '';
+        type = (cols[1] || '').trim().toLowerCase();
+        optionsRaw = cols[2] || '';
+        answerRaw = cols[3] || '';
+      } else if (cols.length === 3) {
+        q = cols[0] || '';
+        optionsRaw = cols[1] || '';
+        answerRaw = cols[2] || '';
       }
-      result.push(current);
-      return result;
-    };
 
+      if (!q.trim() || !answerRaw.trim()) continue;
+
+      const clean = q.toLowerCase().trim();
+      const normalized = clean.replace(/[^a-z0-9]/g, '');
+      const words = new Set(clean.split(/\s+/).filter(w => w.length > 2));
+      const answers = answerRaw.split('||').map(a => a.trim()).filter(a => a.length > 0);
+      const options = optionsRaw.split('|').map(o => o.trim()).filter(o => o.length > 0);
+
+      items.push({
+        rawQuestion: q,
+        normalized,
+        words,
+        type,
+        options,
+        answers,
+      });
+    }
+
+    memoryCache = {
+      mtimeMs: stats.mtimeMs,
+      items,
+    };
+    return items;
+  } catch {
+    return memoryCache ? memoryCache.items : [];
+  }
+}
+
+// Search local imploye-question.csv in-memory cache for matching question (Knowledge Base)
+function getPreAnsweredQuestion(questionText: string, options: string[]): string[] | null {
+  const items = getKnowledgeBase();
+  if (items.length === 0) return null;
+
+  try {
     const targetClean = questionText.toLowerCase().trim();
     const targetNormalized = targetClean.replace(/[^a-z0-9]/g, '');
     const targetWords = new Set(targetClean.split(/\s+/).filter(w => w.length > 2));
@@ -656,49 +757,34 @@ function getPreAnsweredQuestion(questionText: string, options: string[]): string
     let bestMatchAnswers: string[] | null = null;
     let highestOverlap = 0;
 
-    for (let i = 1; i < lines.length; i++) {
-      const cols = parseCsvLine(lines[i]);
-      if (cols.length < 2) continue;
-
-      // Format: Question, Type, Options, Answer
-      const existingQuestion = cols[0] || '';
-      const existingType = (cols[1] || '').trim().toLowerCase();
-      const answerRaw = cols[3] || '';
-      if (!answerRaw.trim()) continue;
-
-      const existingClean = existingQuestion.toLowerCase().trim();
-      const normalizedExisting = existingClean.replace(/[^a-z0-9]/g, '');
-
+    for (const item of items) {
       // 1. Exact Normalized Match
-      const isExactMatch = targetNormalized === normalizedExisting;
+      const isExactMatch = targetNormalized === item.normalized;
 
-      // 2. Substring Match (jika pertanyaan mengandung pertanyaan di CSV atau sebaliknya)
-      const isSubstringMatch = !isExactMatch && targetNormalized.length > 10 && normalizedExisting.length > 10 &&
-        (targetNormalized.includes(normalizedExisting) || normalizedExisting.includes(targetNormalized));
+      // 2. Substring Match
+      const isSubstringMatch = !isExactMatch && targetNormalized.length > 10 && item.normalized.length > 10 &&
+        (targetNormalized.includes(item.normalized) || item.normalized.includes(targetNormalized));
 
       // 3. Word Overlap Similarity (jika kemiripan kata >= 70%)
-      const existingWords = existingClean.split(/\s+/).filter(w => w.length > 2);
       let matchCount = 0;
-      for (const w of existingWords) {
+      for (const w of item.words) {
         if (targetWords.has(w)) matchCount++;
       }
-      const overlapScore = existingWords.length > 0 ? matchCount / Math.max(existingWords.length, targetWords.size) : 0;
+      const overlapScore = item.words.size > 0 ? matchCount / Math.max(item.words.size, targetWords.size) : 0;
 
       if (isExactMatch || isSubstringMatch || overlapScore >= 0.7) {
-        const answers = answerRaw.split('||').map(a => a.trim()).filter(a => a.length > 0);
-
         // Untuk pertanyaan tipe text / isian bebas
-        if (existingType === 'text' || options.length === 0) {
-          if (isExactMatch) return answers;
+        if (item.type === 'text' || options.length === 0) {
+          if (isExactMatch) return item.answers;
           if (overlapScore > highestOverlap) {
             highestOverlap = overlapScore;
-            bestMatchAnswers = answers;
+            bestMatchAnswers = item.answers;
           }
           continue;
         }
 
         // Untuk dropdown/radio/checklist, validasi apakah jawaban ada di pilihan yang tersedia
-        const validAnswers = answers.filter(ans => 
+        const validAnswers = item.answers.filter(ans => 
           options.includes(ans) || options.some(o => o.toLowerCase() === ans.toLowerCase())
         );
 
@@ -716,7 +802,7 @@ function getPreAnsweredQuestion(questionText: string, options: string[]): string
       return bestMatchAnswers;
     }
   } catch (error) {
-    console.error('Failed to read pre-answered questions:', error);
+    console.error('Failed to match pre-answered questions in memory:', error);
   }
   return null;
 }

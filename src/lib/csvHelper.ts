@@ -64,6 +64,12 @@ export function appendQuestionToCsv(
     const escapedAnswers = `"${answers.join(' || ').replace(/"/g, '""')}"`;
 
     fs.appendFileSync(csvPath, `${escapedQuestion},${escapedType},${escapedOptions},${escapedAnswers}\n`, 'utf8');
+
+    // Invalidate in-memory knowledge base cache so next lookup includes this new question immediately
+    try {
+      const { invalidateKnowledgeBaseCache } = require('./questionAnswer');
+      invalidateKnowledgeBaseCache();
+    } catch {}
   } catch (error) {
     console.error('Failed to write to CSV:', error);
   }

@@ -65,6 +65,41 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     let totalAlreadyApplied = 0;
     let totalErrors = 0;
 
+    const isSharedMode = config.limitMode !== 'per_platform';
+    const sharedLimitTarget = config.limitPerDay || 155;
+
+    if (isSharedMode) {
+      onLog(`🎯 Mode Kuota: Kuota Gabungan Aktif (Target Total: ${sharedLimitTarget} lamaran untuk semua platform).`);
+    } else {
+      onLog(`🎯 Mode Kuota: Kuota Per-Platform Aktif (Glints: ${config.limitGlints || 80}, JobStreet: ${config.limitJobstreet || 75}).`);
+    }
+
+    const glintsLimiter = {
+      getTargetLimit: () => isSharedMode ? sharedLimitTarget : (config.limitGlints || config.limitPerDay || 80),
+      isLimitReached: (currentGlintsSuccess: number) => {
+        if (isSharedMode) {
+          return totalSuccess >= sharedLimitTarget;
+        }
+        return currentGlintsSuccess >= (config.limitGlints || config.limitPerDay || 80);
+      },
+      onJobSuccess: () => {
+        totalSuccess++;
+      }
+    };
+
+    const jobstreetLimiter = {
+      getTargetLimit: () => isSharedMode ? sharedLimitTarget : (config.limitJobstreet || config.limitPerDay || 75),
+      isLimitReached: (currentJobstreetSuccess: number) => {
+        if (isSharedMode) {
+          return totalSuccess >= sharedLimitTarget;
+        }
+        return currentJobstreetSuccess >= (config.limitJobstreet || config.limitPerDay || 75);
+      },
+      onJobSuccess: () => {
+        totalSuccess++;
+      }
+    };
+
     const tasks: Promise<void>[] = [];
 
     // ----------------------------------------------------
@@ -78,8 +113,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
 
         glintsLog('🔍 Memulai proses bot Glints di Tab khusus...');
         try {
-          const metrics = await runGlintsBot(pageGlints, config, glintsLog);
-          totalSuccess += metrics.successCount;
+          const metrics = await runGlintsBot(pageGlints, config, glintsLog, glintsLimiter);
           totalAlreadyApplied += metrics.alreadyAppliedCount;
           totalErrors += metrics.errorCount;
         } catch (err: any) {
@@ -104,8 +138,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
 
         jobstreetLog('🔍 Memulai proses bot Jobstreet di Tab khusus...');
         try {
-          const metrics = await runJobstreetBot(pageJobstreet, config, jobstreetLog);
-          totalSuccess += metrics.successCount;
+          const metrics = await runJobstreetBot(pageJobstreet, config, jobstreetLog, jobstreetLimiter);
           totalAlreadyApplied += metrics.alreadyAppliedCount;
           totalErrors += metrics.errorCount;
         } catch (err: any) {
