@@ -3,7 +3,8 @@ import { getConfig, saveConfig } from '@/lib/config';
 import { initializeSheet } from '@/lib/googleSheets';
 
 export async function GET() {
-  return NextResponse.json(getConfig());
+  const config = getConfig();
+  return NextResponse.json({ success: true, config, ...config });
 }
 
 export async function POST(request: Request) {

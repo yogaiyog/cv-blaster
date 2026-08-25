@@ -46,13 +46,16 @@ export async function POST(request: Request) {
 
       global.activeSetupBrowser = browser;
 
-      // Open Glints and Jobstreet in separate tabs
+      // Open Glints, Jobstreet, and LinkedIn in separate tabs
       const pages = await browser.pages();
       const page1 = pages[0] || await browser.newPage();
       page1.goto('https://glints.com/id/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
 
       const page2 = await browser.newPage();
       page2.goto('https://www.jobstreet.co.id/id/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
+
+      const page3 = await browser.newPage();
+      page3.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
 
       browser.on('disconnected', () => {
         global.activeSetupBrowser = null;

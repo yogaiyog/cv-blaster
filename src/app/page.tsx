@@ -13,8 +13,10 @@ interface AppConfig {
   limitMode?: 'shared' | 'per_platform';
   limitGlints?: number;
   limitJobstreet?: number;
+  limitLinkedin?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
+  enableLinkedin?: boolean;
   debugTest: boolean;
   concurrency: number;
   noticePeriod?: string;
@@ -59,8 +61,13 @@ export default function Home() {
     location: '',
     minSalary: '',
     limitPerDay: 20,
+    limitMode: 'shared',
+    limitGlints: 80,
+    limitJobstreet: 75,
+    limitLinkedin: 50,
     enableGlints: true,
     enableJobstreet: true,
+    enableLinkedin: true,
     debugTest: true,
     concurrency: 3,
     noticePeriod: 'Immediately',
@@ -212,34 +219,38 @@ export default function Home() {
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/config');
+      if (!res.ok) return;
       const data = await res.json();
-      if (data) {
-        setConfig(data);
+      const loadedConfig = data.config || data;
+      if (loadedConfig && typeof loadedConfig === 'object') {
+        setConfig((prev) => ({ ...prev, ...loadedConfig }));
       }
     } catch (e) {
-      console.error('Error loading config', e);
+      // ignore abort or temporary network blips
     }
   };
 
   const fetchAppliedHistory = async () => {
     try {
       const res = await fetch('/api/applied');
+      if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
-        setAppliedJobs(data.data);
+        setAppliedJobs(data.data || []);
       }
     } catch (e) {
-      console.error('Error loading applied history', e);
+      // ignore abort or temporary network blips
     }
   };
 
   const checkSetupBrowserStatus = async () => {
     try {
       const res = await fetch('/api/setup-login');
+      if (!res.ok) return;
       const data = await res.json();
-      setIsSetupBrowserRunning(data.isRunning);
+      setIsSetupBrowserRunning(!!data.isRunning);
     } catch (e) {
-      console.error('Error checking setup browser status', e);
+      // ignore abort
     }
   };
 
@@ -549,6 +560,15 @@ export default function Home() {
                   />
                   <span className="text-sm font-medium text-slate-300">Aktifkan Jobstreet</span>
                 </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.enableLinkedin}
+                    onChange={(e) => setConfig({ ...config, enableLinkedin: e.target.checked })}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-sky-600 focus:ring-sky-500"
+                  />
+                  <span className="text-sm font-medium text-slate-300">Aktifkan LinkedIn</span>
+                </label>
 
                 {/* Separator */}
                 <div className="h-5 w-px bg-slate-800 hidden md:block"></div>
@@ -659,12 +679,12 @@ export default function Home() {
                         />
                       </div>
                       <p className="text-xs text-slate-400 mt-5">
-                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
+                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet + LinkedIn maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                     <div>
                       <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
                         Limit Khusus Glints
@@ -690,6 +710,19 @@ export default function Home() {
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 font-bold"
                       />
                       <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitJobstreet || 75} lowongan di Jobstreet.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-sky-400 uppercase tracking-wider mb-1">
+                        Limit Khusus LinkedIn
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.limitLinkedin || 50}
+                        onChange={(e) => setConfig({ ...config, limitLinkedin: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500 font-bold"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitLinkedin || 50} lowongan di LinkedIn.</p>
                     </div>
                   </div>
                 )}

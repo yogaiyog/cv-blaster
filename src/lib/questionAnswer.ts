@@ -316,12 +316,50 @@ function closestExperienceOption(options: string[], years: number): string {
 function yearsForRole(question: string): number {
   const profile = getDynamicProfile();
   const lower = question.toLowerCase();
+
+  // 1. Cek specific role keywords
   for (const entry of profile.experienceByRole) {
     if (entry.keywords.some((kw) => lower.includes(kw))) {
       return entry.years;
     }
   }
-  return profile.defaultExperienceYears;
+
+  // 2. Cek apakah pertanyaan menanyakan skill/teknologi tertentu:
+  // Contoh: "How many years of work experience do you have with Unity?"
+  // Contoh: "Berapa tahun pengalaman menggunakan Golang?"
+  const skillExtractMatch = question.match(/(?:with|using|in|menggunakan|pada|dengan)\s+([A-Za-z0-9#+.\s-]+)\??$/i) ||
+                            question.match(/(?:experience with|pengalaman dengan|pengalaman)\s+([A-Za-z0-9#+.\s-]+)\??$/i);
+
+  const userSkills = getDynamicSkills().map(s => s.toLowerCase());
+
+  if (skillExtractMatch) {
+    const extractedSkill = skillExtractMatch[1].trim().toLowerCase();
+    const hasSkill = userSkills.some(s => 
+      s === extractedSkill || 
+      extractedSkill.includes(s) || 
+      s.includes(extractedSkill)
+    );
+
+    if (!hasSkill) {
+      // Jika kandidat TIDAK memiliki skill tersebut di profil (misal Unity, Unreal, Ruby), kembalikan 0
+      return 0;
+    }
+    return profile.defaultExperienceYears;
+  }
+
+  // 3. Jika pertanyaan umum tentang total tahun pengalaman kerja
+  if (/total|overall|keseluruhan|umum|semua/i.test(lower) || /software engineer|developer|programmer/i.test(lower)) {
+    return profile.defaultExperienceYears;
+  }
+
+  // 4. Cek apakah ada nama skill yang cocok di dalam seluruh pertanyaan
+  const mentionsKnownSkill = userSkills.some(s => s.length > 2 && lower.includes(s));
+  if (mentionsKnownSkill) {
+    return profile.defaultExperienceYears;
+  }
+
+  // Jika skill tidak ada di profil -> 0 tahun
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,9 +386,19 @@ function tryRegexAnswer(
     return match ? [match] : null;
   }
 
-  // Pertanyaan pengalaman (tahun pengalaman, industri, role, dll.)
-  if (/experience|pengalaman/i.test(q) || options.some(o => /thn|tahun|berpengalaman/i.test(o))) {
-    if (options.length > 0) {
+  // Pertanyaan angka tahun pengalaman (hanya jika murni menanyakan durasi angka dan bukan deskripsi project/cerita)
+  const isDescriptiveQ = /jelaskan|ceritakan|sebutkan|describe|explain|project|proyek|portfolio|contoh|apa saja|why|bagaimana|how did/i.test(q);
+
+  if (!isDescriptiveQ) {
+    if (/how many years|berapa tahun|years of (work )?experience|tahun pengalaman|years of experience/i.test(q)) {
+      const yrs = yearsForRole(question);
+      if (options.length > 0) {
+        return [closestExperienceOption(options, yrs)];
+      }
+      return [String(yrs)];
+    }
+
+    if (options.some(o => /thn|tahun|berpengalaman/i.test(o)) && options.length > 0) {
       return [closestExperienceOption(options, yearsForRole(question))];
     }
   }
@@ -510,9 +558,9 @@ function tryRegexAnswer(
     return [notice];
   }
 
-  // Pertanyaan Tahun Pengalaman jika open text
-  if (/experience|pengalaman/i.test(q) && (options.length === 0 || type === "text")) {
-    return [String(profile.defaultExperienceYears || 3)];
+  // Pertanyaan Tahun Pengalaman jika murni numerik
+  if (/how many years|berapa tahun/i.test(q) && (options.length === 0 || type === "text")) {
+    return [String(yearsForRole(question))];
   }
 
   return null;

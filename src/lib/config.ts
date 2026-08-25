@@ -12,8 +12,10 @@ export interface AppConfig {
   limitMode?: 'shared' | 'per_platform';
   limitGlints?: number;
   limitJobstreet?: number;
+  limitLinkedin?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
+  enableLinkedin: boolean;
   debugTest: boolean;
   concurrency: number;
   noticePeriod: string;
@@ -44,8 +46,10 @@ const DEFAULT_CONFIG: AppConfig = {
   limitMode: 'shared',
   limitGlints: 80,
   limitJobstreet: 75,
+  limitLinkedin: 50,
   enableGlints: true,
   enableJobstreet: true,
+  enableLinkedin: true,
   debugTest: true,
   concurrency: 3,
   noticePeriod: 'Immediately',

@@ -2,6 +2,7 @@ import path from 'path';
 import { getConfig } from './config';
 import { runGlintsBot } from './bots/glints';
 import { runJobstreetBot } from './bots/jobstreet';
+import { runLinkedinBot } from './bots/linkedin';
 
 declare global {
   var isBotRunning: boolean;
@@ -16,7 +17,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
   global.isBotRunning = true;
   onLog(`🚀 Starting CV Blaster Engine in ${mode.toUpperCase()} mode...`);
 
-  let browser;
+  let browser: any = null;
   try {
     const puppeteer = require('puppeteer-extra');
     const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -56,6 +57,8 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
         '--window-size=1280,800'
       ],
       defaultViewport: isHeadless ? { width: 1280, height: 800 } : null
@@ -71,7 +74,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     if (isSharedMode) {
       onLog(`🎯 Mode Kuota: Kuota Gabungan Aktif (Target Total: ${sharedLimitTarget} lamaran untuk semua platform).`);
     } else {
-      onLog(`🎯 Mode Kuota: Kuota Per-Platform Aktif (Glints: ${config.limitGlints || 80}, JobStreet: ${config.limitJobstreet || 75}).`);
+      onLog(`🎯 Mode Kuota: Kuota Per-Platform Aktif (Glints: ${config.limitGlints || 80}, JobStreet: ${config.limitJobstreet || 75}, LinkedIn: ${config.limitLinkedin || 50}).`);
     }
 
     const glintsLimiter = {
@@ -100,6 +103,30 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       }
     };
 
+    const linkedinLimiter = {
+      getTargetLimit: () => isSharedMode ? sharedLimitTarget : (config.limitLinkedin || config.limitPerDay || 50),
+      isLimitReached: (currentLinkedinSuccess: number) => {
+        if (isSharedMode) {
+          return totalSuccess >= sharedLimitTarget;
+        }
+        return currentLinkedinSuccess >= (config.limitLinkedin || config.limitPerDay || 50);
+      },
+      onJobSuccess: () => {
+        totalSuccess++;
+      }
+    };
+
+    const initialPages = await browser.pages();
+    let initialPageUsed = false;
+
+    const getOrNewPage = async () => {
+      if (!initialPageUsed && initialPages.length > 0 && initialPages[0]) {
+        initialPageUsed = true;
+        return initialPages[0];
+      }
+      return await browser.newPage();
+    };
+
     const tasks: Promise<void>[] = [];
 
     // ----------------------------------------------------
@@ -107,7 +134,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     // ----------------------------------------------------
     if (config.enableGlints) {
       tasks.push((async () => {
-        const pageGlints = await browser.newPage();
+        const pageGlints = await getOrNewPage();
         await pageGlints.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
         const glintsLog = (msg: string) => onLog(`[Glints] ${msg}`);
 
@@ -132,7 +159,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     // ----------------------------------------------------
     if (config.enableJobstreet) {
       tasks.push((async () => {
-        const pageJobstreet = await browser.newPage();
+        const pageJobstreet = await getOrNewPage();
         await pageJobstreet.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
         const jobstreetLog = (msg: string) => onLog(`[Jobstreet] ${msg}`);
 
@@ -152,12 +179,37 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       onLog('⏩ Jobstreet dinonaktifkan di pengaturan.');
     }
 
+    // ----------------------------------------------------
+    // TAB 3: LINKEDIN AUTOMATION
+    // ----------------------------------------------------
+    if (config.enableLinkedin) {
+      tasks.push((async () => {
+        const pageLinkedin = await getOrNewPage();
+        await pageLinkedin.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const linkedinLog = (msg: string) => onLog(`[LinkedIn] ${msg}`);
+
+        linkedinLog('🔍 Memulai proses bot LinkedIn di Tab khusus...');
+        try {
+          const metrics = await runLinkedinBot(pageLinkedin, config, linkedinLog, linkedinLimiter);
+          totalAlreadyApplied += metrics.alreadyAppliedCount;
+          totalErrors += metrics.errorCount;
+        } catch (err: any) {
+          linkedinLog(`❌ Error: ${err.message || err}`);
+          totalErrors++;
+        } finally {
+          try { await pageLinkedin.close(); } catch {}
+        }
+      })());
+    } else {
+      onLog('⏩ LinkedIn dinonaktifkan di pengaturan.');
+    }
+
     // Tunggu semua tab platform selesai bekerja
     if (tasks.length > 0) {
       onLog(`🚀 Menjalankan ${tasks.length} tab platform secara bersamaan...`);
       await Promise.allSettled(tasks);
     } else {
-      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints & Jobstreet keduanya nonaktif).');
+      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints, Jobstreet & LinkedIn semuanya nonaktif).');
     }
 
     onLog('--------------------------------------------------');
