@@ -25,12 +25,29 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     } catch (e) {}
 
     const config = getConfig();
+
+    // Verify GEMINI_API_KEY is set in environment or .env
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.trim() === '') {
+      throw new Error('GEMINI_API_KEY is missing in your .env file. Please configure it and restart the server.');
+    }
+
     if (!config.searchKeywords) {
       throw new Error('Search keywords are not configured. Please fill them in first.');
     }
 
     const profilePath = path.join(process.cwd(), 'automation-profile');
     onLog('📂 Loading browser profile...');
+
+    // Test Google Sheets connection
+    onLog('📊 Menguji koneksi ke Google Sheets...');
+    const { testSheetsConnection } = require('./googleSheets');
+    const sheetsTest = await testSheetsConnection();
+    if (sheetsTest.success) {
+      onLog(`✅ Google Sheets terhubung: ${sheetsTest.message}`);
+    } else {
+      onLog(`⚠️ Peringatan: Gagal terhubung ke Google Sheets (${sheetsTest.error})`);
+      onLog(`   ℹ️ Lamaran tetap akan diproses, namun riwayat sheets tidak tersimpan jika koneksi terputus.`);
+    }
     
     const isHeadless = mode !== 'headful';
     browser = await puppeteer.launch({
@@ -44,60 +61,87 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       defaultViewport: isHeadless ? { width: 1280, height: 800 } : null
     });
 
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-
     let totalSuccess = 0;
     let totalAlreadyApplied = 0;
     let totalErrors = 0;
 
+    const tasks: Promise<void>[] = [];
+
     // ----------------------------------------------------
-    // GLINTS AUTOMATION
+    // TAB 1: GLINTS AUTOMATION
     // ----------------------------------------------------
     if (config.enableGlints) {
-      onLog('🔍 Checking Glints...');
-      try {
-        const metrics = await runGlintsBot(page, config, onLog);
-        totalSuccess += metrics.successCount;
-        totalAlreadyApplied += metrics.alreadyAppliedCount;
-        totalErrors += metrics.errorCount;
-      } catch (err: any) {
-        onLog(`❌ Glints Error: ${err.message || err}`);
-        totalErrors++;
-      }
+      tasks.push((async () => {
+        const pageGlints = await browser.newPage();
+        await pageGlints.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const glintsLog = (msg: string) => onLog(`[Glints] ${msg}`);
+
+        glintsLog('🔍 Memulai proses bot Glints di Tab khusus...');
+        try {
+          const metrics = await runGlintsBot(pageGlints, config, glintsLog);
+          totalSuccess += metrics.successCount;
+          totalAlreadyApplied += metrics.alreadyAppliedCount;
+          totalErrors += metrics.errorCount;
+        } catch (err: any) {
+          glintsLog(`❌ Error: ${err.message || err}`);
+          totalErrors++;
+        } finally {
+          try { await pageGlints.close(); } catch {}
+        }
+      })());
     } else {
-      onLog('⏩ Glints is disabled in config.');
+      onLog('⏩ Glints dinonaktifkan di pengaturan.');
     }
 
     // ----------------------------------------------------
-    // JOBSTREET AUTOMATION
+    // TAB 2: JOBSTREET AUTOMATION
     // ----------------------------------------------------
     if (config.enableJobstreet) {
-      onLog('🔍 Checking Jobstreet...');
-      try {
-        const metrics = await runJobstreetBot(page, config, onLog);
-        totalSuccess += metrics.successCount;
-        totalAlreadyApplied += metrics.alreadyAppliedCount;
-        totalErrors += metrics.errorCount;
-      } catch (err: any) {
-        onLog(`❌ Jobstreet Error: ${err.message || err}`);
-        totalErrors++;
-      }
+      tasks.push((async () => {
+        const pageJobstreet = await browser.newPage();
+        await pageJobstreet.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const jobstreetLog = (msg: string) => onLog(`[Jobstreet] ${msg}`);
+
+        jobstreetLog('🔍 Memulai proses bot Jobstreet di Tab khusus...');
+        try {
+          const metrics = await runJobstreetBot(pageJobstreet, config, jobstreetLog);
+          totalSuccess += metrics.successCount;
+          totalAlreadyApplied += metrics.alreadyAppliedCount;
+          totalErrors += metrics.errorCount;
+        } catch (err: any) {
+          jobstreetLog(`❌ Error: ${err.message || err}`);
+          totalErrors++;
+        } finally {
+          try { await pageJobstreet.close(); } catch {}
+        }
+      })());
     } else {
-      onLog('⏩ Jobstreet is disabled in config.');
+      onLog('⏩ Jobstreet dinonaktifkan di pengaturan.');
+    }
+
+    // Tunggu semua tab platform selesai bekerja
+    if (tasks.length > 0) {
+      onLog(`🚀 Menjalankan ${tasks.length} tab platform secara bersamaan...`);
+      await Promise.allSettled(tasks);
+    } else {
+      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints & Jobstreet keduanya nonaktif).');
     }
 
     onLog('--------------------------------------------------');
-    onLog('📊 SESSION SUMMARY:');
-    onLog(`✅ Total Applied / Simulated: ${totalSuccess} pekerjaan`);
-    onLog(`⏩ Total Skipped / Already Applied: ${totalAlreadyApplied} pekerjaan`);
-    onLog(`❌ Total Errors: ${totalErrors} pekerjaan`);
+    onLog('📊 RINGKASAN SESI (SESSION SUMMARY):');
+    onLog(`✅ Total Berhasil Dilamar / Disimulasikan: ${totalSuccess} pekerjaan`);
+    onLog(`⏩ Total Dilewati (Sudah Dilamar): ${totalAlreadyApplied} pekerjaan`);
+    onLog(`❌ Total Error: ${totalErrors} pekerjaan`);
     onLog('--------------------------------------------------');
-    onLog('🏁 CV Blasting Session Finished successfully!');
+    onLog('🏁 Sesi CV Blaster Selesai!');
   } catch (error: any) {
     onLog(`🚨 Fatal Bot Error: ${error.message || error}`);
   } finally {
     if (browser) {
+      if (mode === 'headful') {
+        onLog('⏳ Menunggu 5 detik sebelum menutup browser headful...');
+        await new Promise(r => setTimeout(r, 5000));
+      }
       await browser.close();
     }
     global.isBotRunning = false;

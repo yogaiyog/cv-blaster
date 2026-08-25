@@ -65,18 +65,24 @@ export function cleanJobUrl(url: string): string {
 
 export async function addAppliedJob(job: { company: string; title: string; platform: string; jobUrl: string; status: string }) {
   const config = getConfig();
-  const sheets = getSheetsClient();
-  const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  const cleanedUrl = cleanJobUrl(job.jobUrl);
+  if (!config.googleCredentialsJson || !config.spreadsheetId) return;
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: config.spreadsheetId,
-    range: `${config.sheetName}!A2:F`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [[job.company, job.title, job.platform, cleanedUrl, dateStr, job.status]],
-    },
-  });
+  try {
+    const sheets = getSheetsClient();
+    const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+    const cleanedUrl = cleanJobUrl(job.jobUrl);
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: config.spreadsheetId,
+      range: `${config.sheetName}!A2:F`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[job.company, job.title, job.platform, cleanedUrl, dateStr, job.status]],
+      },
+    });
+  } catch (error: any) {
+    console.error('Gagal mencatat lamaran ke Google Sheets (koneksi/credentials):', error.message || error);
+  }
 }
 
 export async function isJobAlreadyApplied(jobUrl: string): Promise<boolean> {
@@ -102,5 +108,31 @@ export async function initializeSheet() {
     });
   } catch (error) {
     console.error('Failed to initialize Google Sheet headers:', error);
+  }
+}
+
+export async function testSheetsConnection(): Promise<{ success: boolean; message?: string; error?: string }> {
+  const config = getConfig();
+  if (!config.googleCredentialsJson || !config.spreadsheetId) {
+    return {
+      success: false,
+      error: 'Google Credentials JSON atau Spreadsheet ID belum diatur di menu Pengaturan.'
+    };
+  }
+
+  try {
+    const sheets = getSheetsClient();
+    const response = await sheets.spreadsheets.get({
+      spreadsheetId: config.spreadsheetId,
+    });
+    return {
+      success: true,
+      message: `Terkoneksi ke Spreadsheet: "${response.data.properties?.title || config.spreadsheetId}"`
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || String(error)
+    };
   }
 }

@@ -13,6 +13,19 @@ export interface AppConfig {
   enableJobstreet: boolean;
   debugTest: boolean;
   concurrency: number;
+  noticePeriod: string;
+  // Candidate Profile Fields
+  fullName: string;
+  expectedSalary: number;
+  educationLevel: string;
+  gpa: string;
+  yearsOfExperience: number;
+  skills: string;
+  portfolioUrl: string;
+  githubUrl: string;
+  linkedinUrl: string;
+  phoneNumber: string;
+  domicile: string;
 }
 
 const CONFIG_PATH = path.join(process.cwd(), 'config.json');
@@ -29,6 +42,18 @@ const DEFAULT_CONFIG: AppConfig = {
   enableJobstreet: true,
   debugTest: true,
   concurrency: 3,
+  noticePeriod: 'Immediately',
+  fullName: 'Yoga Adi Saputra',
+  expectedSalary: 8000000,
+  educationLevel: 'Sarjana (S1)',
+  gpa: '3.75',
+  yearsOfExperience: 3,
+  skills: 'JavaScript, TypeScript, React, React.js, Next.js, Node.js, Express.js, Go, Golang, HTML, HTML5, CSS, CSS3, Tailwind CSS, PostgreSQL, MySQL, RESTful API, Docker, Git',
+  portfolioUrl: 'https://github.com/yogaadi',
+  githubUrl: 'https://github.com/yogaadi',
+  linkedinUrl: 'https://www.linkedin.com',
+  phoneNumber: '081234567890',
+  domicile: 'Jakarta Selatan, DKI Jakarta',
 };
 
 export function getConfig(): AppConfig {

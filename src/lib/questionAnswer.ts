@@ -19,57 +19,194 @@
  */
 
 import { parse } from "csv-parse/sync";
-import { readFileSync, writeFileSync } from "fs";
+import fs, { readFileSync, writeFileSync } from "fs";
+import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getConfig } from "./config";
 
 // ---------------------------------------------------------------------------
 // 1. YOUR PROFILE — edit these to match your actual situation
 // ---------------------------------------------------------------------------
+const skills = [
+  // Programming Languages
+  "JavaScript",
+  "TypeScript",
+  "Python",
+  "Java",
+  "C#",
+  "C++",
+  "PHP",
+  "Go",
+  "HTML",
+  "CSS",
 
-const PROFILE = {
-  expectedMonthlySalaryIDR: 8_000_000,
-  educationLevel: "Sarjana (S1)" as const, // must match option wording (ID or EN, both handled below)
+  // Frontend
+  "React",
+  "React.js",
+  "Next.js",
+  "Angular",
+  "Angular.js",
+  "Tailwind CSS",
+  "Bootstrap",
+  "jQuery",
+  "Framer Motion",
+  "Three.js",
+  "React Three Fiber",
+  "Drei",
 
-  experienceByRole: [
-    { keywords: ["full stack", "fullstack"], years: 3 },
-    { keywords: ["backend"], years: 3 },
-    { keywords: ["java developer", "java"], years: 2 },
-    { keywords: ["postgresql", "postgres"], years: 2 },
-    { keywords: ["web developer"], years: 3 },
-    { keywords: ["software development", "programmer"], years: 3 },
-    { keywords: ["sales", "marketing"], years: 0 },
-  ],
-  defaultExperienceYears: 1,
+  // Backend
+  "Node.js",
+  "Express.js",
+  "Fiber",
+  "GORM",
+  "REST API",
+  "RESTful API",
 
-  // Right-to-work status. Must match option wording exactly (script tries
-  // both Indonesian and English phrasing below).
-  workRights: {
-    id: "Saya adalah warga negara Indonesia",
-    en: "I'm an Indonesian citizen",
-  },
+  // Backend / Async / Messaging
+  "Redis",
+  "RabbitMQ",
+  "Celery",
+  "Asynq",
+  "message queue",
+  "kafka",
 
-  // Resume selection: a substring that identifies your preferred resume
-  // file among the options (e.g. filename minus extension quirks).
-  preferredResumeHint: "Full Stack Developer - Glints TapLoker",
-  // Fallback if no file option matches the hint above:
-  resumeFallback: "Don't include a resumé",
+  // Database
+  "PostgreSQL",
+  "MySQL",
+  "Supabase",
+  "Prisma",
+  "SQL",
 
-  coverLetterPreference: "Don't include a cover letter",
+  // DevOps / Infrastructure
+  "Docker",
+  "Nginx",
+  "PM2",
+  "Git",
+  "GitHub",
+  "GitHub Actions",
+  "Cloudflare",
+  "Let's Encrypt",
+  "Certbot",
+  "CI/CD",
 
-  // For "Make this my default resumé" style single-checkbox questions.
-  wantDefaultResume: true,
+  // Development Tools
+  "Postman",
+  "VS Code",
+  "Git",
+  "GitHub",
 
-  // Tools/technologies you have experience with, for multi-select
-  // "which of these have you used" checklist questions. Matching is
-  // case-insensitive substring match against each option.
-  knownTools: ["git", "svn", "subversion"],
-};
+  // Architecture / Development
+  "Full Stack Development",
+  "Backend Development",
+  "Frontend Development",
+  "Web Development",
+  "API Development",
+  "Database Design",
+  "Microservices",
+  "Object-Oriented Programming",
+  "Asynchronous Programming",
+
+  // Frameworks / Platforms
+  "Next.js",
+  "Angular",
+  "React",
+  "Node.js",
+
+  // Other
+  "Blender",
+  "TouchDesigner",
+  "MediaPipe",
+  "figma",
+  "clickup",
+  "jira",
+  "trello",
+  "slack",
+  "notion",
+
+  // Methodologies
+  "Agile",
+  "Scrum",
+  "Problem Solving",
+  "Debugging"
+];
+
+
+
+export function getDynamicProfile() {
+  try {
+    const cfg = getConfig();
+    return {
+      expectedMonthlySalaryIDR: Number(cfg.expectedSalary) || 8_000_000,
+      educationLevel: cfg.educationLevel || "Sarjana (S1)",
+      gpa: cfg.gpa || "3.75",
+      defaultExperienceYears: Number(cfg.yearsOfExperience) || 3,
+      experienceByRole: [
+        { keywords: ["full stack", "fullstack"], years: Number(cfg.yearsOfExperience) || 3 },
+        { keywords: ["backend"], years: Number(cfg.yearsOfExperience) || 3 },
+        { keywords: ["java developer", "java"], years: 2 },
+        { keywords: ["postgresql", "postgres"], years: 2 },
+        { keywords: ["web developer"], years: Number(cfg.yearsOfExperience) || 3 },
+        { keywords: ["software development", "programmer"], years: Number(cfg.yearsOfExperience) || 3 },
+        { keywords: ["sales", "marketing"], years: 0 },
+      ],
+      workRights: {
+        id: "Saya adalah warga negara Indonesia",
+        en: "I'm an Indonesian citizen",
+      },
+      preferredResumeHint: "Full Stack Developer - Glints TapLoker",
+      resumeFallback: "Don't include a resumé",
+      coverLetterPreference: "Don't include a cover letter",
+      wantDefaultResume: true,
+      knownTools: ["git", "svn", "subversion"],
+      portfolio: cfg.portfolioUrl || "https://github.com/yogaadi",
+      github: cfg.githubUrl || "https://github.com/yogaadi",
+      linkedin: cfg.linkedinUrl || "https://www.linkedin.com",
+      noticePeriod: cfg.noticePeriod || "Immediately",
+    };
+  } catch {
+    return {
+      expectedMonthlySalaryIDR: 8_000_000,
+      educationLevel: "Sarjana (S1)",
+      gpa: "3.75",
+      defaultExperienceYears: 3,
+      experienceByRole: [
+        { keywords: ["full stack", "fullstack"], years: 3 },
+        { keywords: ["backend"], years: 3 },
+        { keywords: ["web developer"], years: 3 },
+      ],
+      workRights: {
+        id: "Saya adalah warga negara Indonesia",
+        en: "I'm an Indonesian citizen",
+      },
+      preferredResumeHint: "Full Stack Developer",
+      resumeFallback: "Don't include a resumé",
+      coverLetterPreference: "Don't include a cover letter",
+      wantDefaultResume: true,
+      knownTools: ["git"],
+      portfolio: "https://github.com/yogaadi",
+      github: "https://github.com/yogaadi",
+      linkedin: "https://www.linkedin.com",
+      noticePeriod: "Immediately",
+    };
+  }
+}
+
+export function getDynamicSkills(): string[] {
+  try {
+    const cfg = getConfig();
+    if (cfg.skills && cfg.skills.trim().length > 0) {
+      const userSkills = cfg.skills.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      return Array.from(new Set([...userSkills, ...skills]));
+    }
+  } catch {}
+  return skills;
+}
 
 // ---------------------------------------------------------------------------
 // 2. Types
 // ---------------------------------------------------------------------------
 
-type QuestionType = "dropdown" | "radiobutton" | "checklist" | "unknown";
+type QuestionType = "dropdown" | "radiobutton" | "checklist" | "text" | "unknown";
 
 interface Row {
   url: string;
@@ -147,11 +284,19 @@ function closestSalaryOption(options: string[], target: number): string {
 
 function closestExperienceOption(options: string[], years: number): string {
   const parseYears = (opt: string): number | null => {
-    const lower = opt.toLowerCase();
-    if (/no experience|tidak ada pengalaman/.test(lower)) return 0;
-    if (/less than 1|kurang dari 1/.test(lower)) return 0.5;
-    if (/more than 5|lebih dari 5/.test(lower)) return 6;
-    const m = lower.match(/(\d+)\s*(year|tahun)/);
+    const lower = opt.toLowerCase().trim();
+    if (/no experience|tidak berpengalaman|tidak ada pengalaman/i.test(lower)) return 0;
+    if (/<1|< 1|less than 1|kurang dari 1/i.test(lower)) return 0.5;
+    if (/10\+|more than 10|lebih dari 10/i.test(lower)) return 10;
+    if (/5\s*-\s*10/i.test(lower)) return 7.5;
+    if (/3\s*-\s*5/i.test(lower)) return 4;
+    if (/1\s*-\s*3/i.test(lower)) return 2;
+    if (/more than 5|lebih dari 5/i.test(lower)) return 6;
+    const rangeMatch = lower.match(/(\d+)\s*-\s*(\d+)/);
+    if (rangeMatch) {
+      return (parseInt(rangeMatch[1], 10) + parseInt(rangeMatch[2], 10)) / 2;
+    }
+    const m = lower.match(/(\d+)\s*(thn|tahun|yr|yrs|year|years)?/);
     return m ? parseInt(m[1], 10) : null;
   };
   let best = options[0];
@@ -169,44 +314,50 @@ function closestExperienceOption(options: string[], years: number): string {
 }
 
 function yearsForRole(question: string): number {
+  const profile = getDynamicProfile();
   const lower = question.toLowerCase();
-  for (const entry of PROFILE.experienceByRole) {
+  for (const entry of profile.experienceByRole) {
     if (entry.keywords.some((kw) => lower.includes(kw))) {
       return entry.years;
     }
   }
-  return PROFILE.defaultExperienceYears;
+  return profile.defaultExperienceYears;
 }
 
-/**
- * Loose keyword-based classification. Returns one or more chosen options,
- * or null if nothing matched (caller falls back to the LLM).
- */
+// ---------------------------------------------------------------------------
+// 4. Deterministic rules (instant, 0 tokens)
+// ---------------------------------------------------------------------------
+
 function tryRegexAnswer(
   question: string,
   options: string[],
   type: QuestionType
 ): string[] | null {
   const q = question.toLowerCase();
+  const profile = getDynamicProfile();
+  const dynamicSkills = getDynamicSkills();
 
-  if (/salary|gaji/.test(q)) {
-    return [closestSalaryOption(options, PROFILE.expectedMonthlySalaryIDR)];
+  if (/salary|gaji/.test(q) && options.length > 0) {
+    return [closestSalaryOption(options, profile.expectedMonthlySalaryIDR)];
   }
 
   if (/qualification|kualifikasi/.test(q)) {
     const match = options.find((o) =>
-      o.toLowerCase().includes(PROFILE.educationLevel.toLowerCase())
+      o.toLowerCase().includes(profile.educationLevel.toLowerCase())
     );
     return match ? [match] : null;
   }
 
-  if (/years'? experience|tahun pengalaman/.test(q)) {
-    return [closestExperienceOption(options, yearsForRole(question))];
+  // Pertanyaan pengalaman (tahun pengalaman, industri, role, dll.)
+  if (/experience|pengalaman/i.test(q) || options.some(o => /thn|tahun|berpengalaman/i.test(o))) {
+    if (options.length > 0) {
+      return [closestExperienceOption(options, yearsForRole(question))];
+    }
   }
 
   if (/right to work|hak.*bekerja/.test(q)) {
     const match = options.find(
-      (o) => o.includes(PROFILE.workRights.id) || o.includes(PROFILE.workRights.en)
+      (o) => o.includes(profile.workRights.id) || o.includes(profile.workRights.en)
     );
     return match ? [match] : null;
   }
@@ -214,17 +365,48 @@ function tryRegexAnswer(
   // Cover letter question: options mention "cover letter" but question
   // text itself is often generic ("Select one option").
   if (options.some((o) => /cover letter|surat lamaran/i.test(o))) {
-    const match = options.find((o) => o === PROFILE.coverLetterPreference);
+    const match = options.find((o) => o === profile.coverLetterPreference);
     return match ? [match] : [options[options.length - 1]]; // last option is usually "don't include"
+  }
+
+  // Pertanyaan notice period / kapan bisa mulai bekerja (e.g. Kapan kamu dapat mulai bekerja? / Notice period)
+  const isNoticePeriodQ = /mulai.*bekerja|notice.*period|start.*work|availability|kapan.*dapat|earliest.*start|ketersediaan|kapan.*bisa|join.*date|available.*to.*start|when.*start/i.test(q);
+  const hasNoticePeriodOptions = options.some(o => /immediately|immediate|asap|as soon as possible|secepatnya|segera|langsung|2 weeks|1 month|2 months|2 minggu|1 bulan|2 bulan/i.test(o));
+
+  if (isNoticePeriodQ || hasNoticePeriodOptions) {
+    const pref = (profile.noticePeriod || "immediately").toLowerCase();
+
+    if (/2\s*week|two\s*week|2\s*minggu|14\s*hari|14\s*days/i.test(pref)) {
+      const match = options.find(o => /2\s*week|two\s*week|2\s*minggu|14\s*hari|14\s*days/i.test(o));
+      if (match) return [match];
+    } else if (/1\s*month|one\s*month|1\s*bulan|30\s*hari|30\s*days|4\s*week/i.test(pref)) {
+      const match = options.find(o => /1\s*month|one\s*month|1\s*bulan|30\s*hari|30\s*days|4\s*week/i.test(o));
+      if (match) return [match];
+    } else if (/2\s*month|two\s*month|2\s*bulan|60\s*hari|60\s*days|8\s*week/i.test(pref)) {
+      const match = options.find(o => /2\s*month|two\s*month|2\s*bulan|60\s*hari|60\s*days|8\s*week/i.test(o));
+      if (match) return [match];
+    } else {
+      // Default: Immediately / ASAP / Secepatnya / Segera / Langsung
+      const asapRegex = /immediately|immediate|asap|as soon as possible|secepatnya|segera|langsung|bisa langsung|siap segera|now|sekarang|0\s*day|0\s*hari/i;
+      const match = options.find(o => asapRegex.test(o));
+      if (match) return [match];
+    }
+    return [options[0]];
+  }
+
+  // Kesediaan kerja / Relocation / Onsite / Working Policy / Yes-No Suitability
+  if (/bersedia|willing|relocate|di lokasi|onsite|on-site|hybrid|remote|wfo|wfh|policy/i.test(q) && options.some(o => /^(ya|yes|true)$/i.test(o.trim()))) {
+    const match = options.find(o => /^(ya|yes|true)$/i.test(o.trim())) || options.find(o => /ya|yes/i.test(o));
+    if (match) return [match];
   }
 
   // Resume file selection: options look like filenames (.pdf) plus a
   // "don't include" choice.
   if (options.some((o) => /\.pdf$/i.test(o))) {
     const match = options.find((o) =>
-      o.toLowerCase().includes(PROFILE.preferredResumeHint.toLowerCase())
+      o.toLowerCase().includes(profile.preferredResumeHint.toLowerCase())
     );
-    return match ? [match] : [PROFILE.resumeFallback];
+    return match ? [match] : [profile.resumeFallback];
   }
 
   // "Make this my default resumé" style single checkbox (checklist with
@@ -234,15 +416,75 @@ function tryRegexAnswer(
     options.length === 1 &&
     /default resum/i.test(options[0])
   ) {
-    return PROFILE.wantDefaultResume ? [options[0]] : [];
+    return profile.wantDefaultResume ? [options[0]] : [];
   }
 
-  // Tools/technology checklist (multi-select)
-  if (type === "checklist" && /revision control|tools|technolog/i.test(q)) {
+  // Tools/technology/skills/languages checklist (multi-select)
+  if (type === "checklist" && /revision control|tools|technolog|skill|kemampuan|language|bahasa|program/i.test(q)) {
+    const allKnown = [...profile.knownTools, ...dynamicSkills].map(s => s.toLowerCase());
     const matches = options.filter((o) =>
-      PROFILE.knownTools.some((tool) => o.toLowerCase().includes(tool))
+      allKnown.some((tool) => o.toLowerCase().includes(tool))
     );
     return matches.length > 0 ? matches : [options[options.length - 1]]; // "None of these" is usually last
+  }
+
+  // Skill proficiency rating question (Glints matrix sub-questions: Tidak Berpengalaman / Dasar / Menengah / Ahli)
+  if (options.some(o => /Tidak Berpengalaman|Dasar|Menengah|Ahli|NO_EXPERIENCE|BASIC|INTERMEDIATE|ADVANCED/i.test(o))) {
+    const allKnown = [...profile.knownTools, ...dynamicSkills].map(s => s.toLowerCase());
+    const cleanQ = q.replace(/seberapa mahir.*keahlian berikut.*-?/i, '').trim();
+    const isKnown = allKnown.some(skill => cleanQ.includes(skill) || skill.includes(cleanQ));
+    
+    if (isKnown) {
+      // Selalu pilih "Ahli" (atau ADVANCED/Expert) untuk skill yang dikuasai
+      const expertMatch = options.find(o => /^(Ahli|ADVANCED|Expert)$/i.test(o.trim())) ||
+                          options.find(o => /Ahli|ADVANCED|Expert/i.test(o)) ||
+                          options.find(o => /Menengah|INTERMEDIATE/i.test(o));
+      return expertMatch ? [expertMatch] : [options[options.length - 1]];
+    } else {
+      // Pilih "Dasar" untuk skill di luar profil
+      const basicMatch = options.find(o => /^(Dasar|BASIC)$/i.test(o.trim())) ||
+                         options.find(o => /Dasar|BASIC/i.test(o)) ||
+                         options.find(o => /Tidak Berpengalaman|NO_EXPERIENCE/i.test(o));
+      return basicMatch ? [basicMatch] : [options[0]];
+    }
+  }
+
+  // Pertanyaan Kemahiran Bahasa Inggris / Language Proficiency (Rating 1 - 10 atau isian teks)
+  if (/english|bahasa inggris|proficiency|self-rate|1 to 10|1-10|kemampuan bahasa/i.test(q)) {
+    if (/1 to 10|1-10|scale|rate.*from|score/i.test(q)) {
+      return ["8"];
+    }
+    if (options.length > 0) {
+      const match = options.find(o => /fluent|mahir|proficient|advanced|professional/i.test(o));
+      if (match) return [match];
+    }
+    return ["Proficient / Fluent (8/10)"];
+  }
+
+  // Pertanyaan GPA / IPK
+  if (/gpa|ipk|grade point/i.test(q)) {
+    return [profile.gpa || "3.75"];
+  }
+
+  // Pertanyaan Gaji jika open text
+  if (/salary|gaji|penghasilan/i.test(q) && (options.length === 0 || type === "text")) {
+    return [String(profile.expectedMonthlySalaryIDR || 8000000)];
+  }
+
+  // Pertanyaan Portofolio / GitHub / LinkedIn jika open text
+  if (/github/i.test(q)) {
+    return [profile.github || "https://github.com/yogaadi"];
+  }
+  if (/linkedin/i.test(q)) {
+    return [profile.linkedin || "https://www.linkedin.com"];
+  }
+  if (/portfolio|portofolio|website|link/i.test(q) && (options.length === 0 || type === "text")) {
+    return [profile.portfolio || "https://github.com/yogaadi"];
+  }
+
+  // Pertanyaan Tahun Pengalaman jika open text
+  if (/experience|pengalaman/i.test(q) && (options.length === 0 || type === "text")) {
+    return [String(profile.defaultExperienceYears || 3)];
   }
 
   return null;
@@ -259,18 +501,56 @@ async function askLLM(
   options: string[],
   type: QuestionType
 ): Promise<string[]> {
+  const profile = getDynamicProfile();
+  const dynamicSkills = getDynamicSkills();
+
+  if (type === "text" || options.length === 0) {
+    const prompt = `You are answering a job application screening question on behalf of a candidate.
+
+Candidate profile:
+- Role: Full Stack Developer (Skills: ${dynamicSkills.slice(0, 15).join(', ')})
+- Experience: ${profile.defaultExperienceYears} years
+- Education: ${profile.educationLevel}, GPA: ${profile.gpa}
+- Expected salary: Rp ${profile.expectedMonthlySalaryIDR.toLocaleString("id-ID")}
+- Availability: ${profile.noticePeriod}
+
+Question: "${question}"
+
+Reply with a concise, highly professional, direct answer (1-2 sentences maximum, or just the number/fact if it's a simple factual question). Reply in the same language as the question (Indonesian or English).`;
+
+    try {
+      if (process.env.GEMINI_API_KEY) {
+        const model = ai.getGenerativeModel({ model: "gemini-3.6-flash" });
+        const result = await model.generateContent(prompt);
+        const text = (result.response.text() || "").trim();
+        if (text) return [text];
+      }
+    } catch {}
+
+    // Smart context-aware fallback based on question intent
+    const lowerQ = question.toLowerCase();
+    if (/english|bahasa inggris|rate|1 to 10/i.test(lowerQ)) return ["8"];
+    if (/gpa|ipk/i.test(lowerQ)) return [profile.gpa || "3.75"];
+    if (/salary|gaji/i.test(lowerQ)) return [String(profile.expectedMonthlySalaryIDR || 8000000)];
+    if (/experience|tahun/i.test(lowerQ)) return [String(profile.defaultExperienceYears || 3)];
+    if (/why|alasan|describe|ceritakan|jelaskan|introduce/i.test(lowerQ)) {
+      return ["I have 3+ years of experience as a Full Stack Developer specializing in React, Next.js, Node.js, TypeScript, and PostgreSQL building scalable applications."];
+    }
+    return ["8"];
+  }
+
   const multiSelect = type === "checklist";
 
   const prompt = `You are filling out a job application screening question on behalf of a candidate.
 
 Candidate profile:
-- Expected monthly salary: Rp ${PROFILE.expectedMonthlySalaryIDR.toLocaleString("id-ID")}
-- Education: ${PROFILE.educationLevel}
-- Experience: ${PROFILE.experienceByRole
+- Expected monthly salary: Rp ${profile.expectedMonthlySalaryIDR.toLocaleString("id-ID")}
+- Education: ${profile.educationLevel}
+- Experience: ${profile.experienceByRole
     .map((e) => `${e.keywords[0]}: ${e.years} years`)
-    .join(", ")}; default ${PROFILE.defaultExperienceYears} years for anything else.
-- Right to work: ${PROFILE.workRights.en}
-- Known tools: ${PROFILE.knownTools.join(", ")}
+    .join(", ")}; default ${profile.defaultExperienceYears} years for anything else.
+- Right to work: ${profile.workRights.en}
+- Known tools: ${profile.knownTools.join(", ")}
 
 Question: "${question}"
 Question type: ${type} (${multiSelect ? "you may choose MULTIPLE options" : "choose exactly ONE option"})
@@ -278,7 +558,7 @@ Allowed options (copy chosen ones verbatim): ${options.map((o) => `"${o}"`).join
 
 Reply with ONLY the chosen option(s), copied exactly from the list. If choosing multiple, separate them with " || ". Nothing else.`;
 
-  const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const model = ai.getGenerativeModel({ model: "gemini-3.6-flash" });
   const result = await model.generateContent(prompt);
   const text = (result.response.text() || "").trim();
 
@@ -335,18 +615,133 @@ async function main() {
   console.log(`Written to ${outPath}`);
 }
 
+// Search local imploye-question.csv for matching question first (Knowledge Base Cache)
+function getPreAnsweredQuestion(questionText: string, options: string[]): string[] | null {
+  const csvPath = path.join(process.cwd(), 'public', 'imploye-question.csv');
+  if (!fs.existsSync(csvPath)) return null;
+
+  try {
+    const content = fs.readFileSync(csvPath, 'utf8');
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length <= 1) return null;
+
+    const parseCsvLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    };
+
+    const targetClean = questionText.toLowerCase().trim();
+    const targetNormalized = targetClean.replace(/[^a-z0-9]/g, '');
+    const targetWords = new Set(targetClean.split(/\s+/).filter(w => w.length > 2));
+
+    let bestMatchAnswers: string[] | null = null;
+    let highestOverlap = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      if (cols.length < 2) continue;
+
+      // Format: Question, Type, Options, Answer
+      const existingQuestion = cols[0] || '';
+      const existingType = (cols[1] || '').trim().toLowerCase();
+      const answerRaw = cols[3] || '';
+      if (!answerRaw.trim()) continue;
+
+      const existingClean = existingQuestion.toLowerCase().trim();
+      const normalizedExisting = existingClean.replace(/[^a-z0-9]/g, '');
+
+      // 1. Exact Normalized Match
+      const isExactMatch = targetNormalized === normalizedExisting;
+
+      // 2. Substring Match (jika pertanyaan mengandung pertanyaan di CSV atau sebaliknya)
+      const isSubstringMatch = !isExactMatch && targetNormalized.length > 10 && normalizedExisting.length > 10 &&
+        (targetNormalized.includes(normalizedExisting) || normalizedExisting.includes(targetNormalized));
+
+      // 3. Word Overlap Similarity (jika kemiripan kata >= 70%)
+      const existingWords = existingClean.split(/\s+/).filter(w => w.length > 2);
+      let matchCount = 0;
+      for (const w of existingWords) {
+        if (targetWords.has(w)) matchCount++;
+      }
+      const overlapScore = existingWords.length > 0 ? matchCount / Math.max(existingWords.length, targetWords.size) : 0;
+
+      if (isExactMatch || isSubstringMatch || overlapScore >= 0.7) {
+        const answers = answerRaw.split('||').map(a => a.trim()).filter(a => a.length > 0);
+
+        // Untuk pertanyaan tipe text / isian bebas
+        if (existingType === 'text' || options.length === 0) {
+          if (isExactMatch) return answers;
+          if (overlapScore > highestOverlap) {
+            highestOverlap = overlapScore;
+            bestMatchAnswers = answers;
+          }
+          continue;
+        }
+
+        // Untuk dropdown/radio/checklist, validasi apakah jawaban ada di pilihan yang tersedia
+        const validAnswers = answers.filter(ans => 
+          options.includes(ans) || options.some(o => o.toLowerCase() === ans.toLowerCase())
+        );
+
+        if (validAnswers.length > 0) {
+          if (isExactMatch) return validAnswers;
+          if (overlapScore > highestOverlap) {
+            highestOverlap = overlapScore;
+            bestMatchAnswers = validAnswers;
+          }
+        }
+      }
+    }
+
+    if (bestMatchAnswers !== null) {
+      return bestMatchAnswers;
+    }
+  } catch (error) {
+    console.error('Failed to read pre-answered questions:', error);
+  }
+  return null;
+}
+
 // Export answerQuestion for bot integration
 export async function answerQuestion(
   question: string,
   options: string[],
-  type: "dropdown" | "checklist" | "radiobutton"
+  type: "dropdown" | "checklist" | "radiobutton" | "text" | "unknown"
 ): Promise<string[]> {
   try {
+    // 1. Priority: Check Local Knowledge Base Cache (imploye-question.csv)
+    const cachedAnswers = getPreAnsweredQuestion(question, options);
+    if (cachedAnswers !== null) {
+      return cachedAnswers;
+    }
+
+    // 2. Second Priority: Regex pattern rules
     const normType = type as QuestionType;
     const regexAnswer = tryRegexAnswer(question, options, normType);
     if (regexAnswer !== null) {
       return regexAnswer;
     }
+
+    // 3. Fallback: Ask Gemini LLM
     return await askLLM(question, options, normType);
   } catch (err) {
     console.error(`AI failed to answer "${question}":`, err);

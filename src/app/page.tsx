@@ -14,6 +14,19 @@ interface AppConfig {
   enableJobstreet: boolean;
   debugTest: boolean;
   concurrency: number;
+  noticePeriod?: string;
+  // Candidate Profile fields
+  fullName?: string;
+  expectedSalary?: number;
+  educationLevel?: string;
+  gpa?: string;
+  yearsOfExperience?: number;
+  skills?: string;
+  portfolioUrl?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  phoneNumber?: string;
+  domicile?: string;
 }
 
 interface AppliedJob {
@@ -23,6 +36,14 @@ interface AppliedJob {
   jobUrl: string;
   date: string;
   status: string;
+}
+
+interface QuestionItem {
+  id: string;
+  question: string;
+  type: string;
+  options: string;
+  answer: string;
 }
 
 export default function Home() {
@@ -39,15 +60,42 @@ export default function Home() {
     enableJobstreet: true,
     debugTest: true,
     concurrency: 3,
+    noticePeriod: 'Immediately',
+    fullName: 'Yoga Adi Saputra',
+    expectedSalary: 8000000,
+    educationLevel: 'Sarjana (S1)',
+    gpa: '3.75',
+    yearsOfExperience: 3,
+    skills: 'JavaScript, TypeScript, React, React.js, Next.js, Node.js, Express.js, Go, Golang, HTML, HTML5, CSS, CSS3, Tailwind CSS, PostgreSQL, MySQL, RESTful API, Docker, Git',
+    portfolioUrl: 'https://github.com/yogaadi',
+    githubUrl: 'https://github.com/yogaadi',
+    linkedinUrl: 'https://www.linkedin.com',
+    phoneNumber: '081234567890',
+    domicile: 'Jakarta Selatan, DKI Jakarta',
   });
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'config' | 'logs' | 'history'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'profile' | 'questions' | 'logs' | 'history'>('config');
   const [logs, setLogs] = useState<string[]>([]);
   const [isBotRunning, setIsBotRunning] = useState(false);
   const [isSetupBrowserRunning, setIsSetupBrowserRunning] = useState(false);
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Question CSV state
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [rawCsvText, setRawCsvText] = useState('');
+  const [csvViewMode, setCsvViewMode] = useState<'table' | 'raw'>('table');
+  const [questionSearch, setQuestionSearch] = useState('');
+  const [editingQuestion, setEditingQuestion] = useState<QuestionItem | null>(null);
+  const [isNewQuestionModalOpen, setIsNewQuestionModalOpen] = useState(false);
+  const [newQuestionData, setNewQuestionData] = useState<Omit<QuestionItem, 'id'>>({
+    question: '',
+    type: 'radiobutton',
+    options: '',
+    answer: ''
+  });
+  const [csvSaveStatus, setCsvSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const logTerminalRef = useRef<HTMLDivElement>(null);
@@ -56,6 +104,7 @@ export default function Home() {
   useEffect(() => {
     fetchConfig();
     fetchAppliedHistory();
+    fetchQuestions();
     checkSetupBrowserStatus();
 
     // Check setup browser status every 5 seconds
@@ -69,6 +118,93 @@ export default function Home() {
       logTerminalRef.current.scrollTop = logTerminalRef.current.scrollHeight;
     }
   }, [logs]);
+
+  const fetchQuestions = async () => {
+    try {
+      const res = await fetch('/api/questions');
+      const data = await res.json();
+      if (data.success) {
+        setQuestions(data.questions || []);
+        setRawCsvText(data.rawCsv || '');
+      }
+    } catch (e) {
+      console.error('Error loading questions', e);
+    }
+  };
+
+  const handleSaveRawCsv = async () => {
+    setCsvSaveStatus(null);
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_raw', rawCsv: rawCsvText }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCsvSaveStatus({ type: 'success', message: 'File CSV berhasil diperbarui!' });
+        fetchQuestions();
+      } else {
+        setCsvSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan file CSV' });
+      }
+    } catch (e: any) {
+      setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan file CSV' });
+    }
+  };
+
+  const handleSaveQuestionsList = async (updatedList: QuestionItem[]) => {
+    setCsvSaveStatus(null);
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_all', questions: updatedList }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setQuestions(updatedList);
+        setCsvSaveStatus({ type: 'success', message: 'Daftar pertanyaan berhasil disimpan!' });
+        fetchQuestions();
+      } else {
+        setCsvSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan pertanyaan' });
+      }
+    } catch (e: any) {
+      setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan pertanyaan' });
+    }
+  };
+
+  const handleAddNewQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuestionData.question.trim()) return;
+
+    const newItem: QuestionItem = {
+      id: `q-${Date.now()}`,
+      question: newQuestionData.question.trim(),
+      type: newQuestionData.type,
+      options: newQuestionData.options.trim(),
+      answer: newQuestionData.answer.trim(),
+    };
+
+    const updated = [newItem, ...questions];
+    await handleSaveQuestionsList(updated);
+    setIsNewQuestionModalOpen(false);
+    setNewQuestionData({ question: '', type: 'radiobutton', options: '', answer: '' });
+  };
+
+  const handleUpdateQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingQuestion) return;
+
+    const updated = questions.map((q) => (q.id === editingQuestion.id ? editingQuestion : q));
+    await handleSaveQuestionsList(updated);
+    setEditingQuestion(null);
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus pertanyaan ini dari database CSV?')) return;
+    const updated = questions.filter((q) => q.id !== id);
+    await handleSaveQuestionsList(updated);
+  };
 
   const fetchConfig = async () => {
     try {
@@ -147,7 +283,16 @@ export default function Home() {
     }
   };
 
-  const handleStartBot = (mode: 'headless' | 'headful' = 'headless') => {
+  const [sheetsWarning, setSheetsWarning] = useState<{
+    open: boolean;
+    error: string;
+    mode: 'headless' | 'headful';
+  } | null>(null);
+
+  const [isCheckingSheets, setIsCheckingSheets] = useState(false);
+
+  const executeStartBot = (mode: 'headless' | 'headful' = 'headless') => {
+    setSheetsWarning(null);
     if (isBotRunning) return;
 
     setLogs([]);
@@ -172,6 +317,39 @@ export default function Home() {
       eventSource.close();
       fetchAppliedHistory(); // Refresh history table when done
     };
+  };
+
+  const handleStartBot = async (mode: 'headless' | 'headful' = 'headless') => {
+    if (isBotRunning || isCheckingSheets) return;
+
+    setIsCheckingSheets(true);
+    try {
+      const res = await fetch('/api/test-sheets');
+      const data = await res.json();
+
+      if (!data.success) {
+        setSheetsWarning({
+          open: true,
+          error: data.error || 'Tidak dapat terhubung ke Google Sheets.',
+          mode
+        });
+        setIsCheckingSheets(false);
+        return;
+      }
+    } catch (err: any) {
+      setSheetsWarning({
+        open: true,
+        error: err.message || 'Gagal menghubungi server untuk verifikasi Google Sheets.',
+        mode
+      });
+      setIsCheckingSheets(false);
+      return;
+    } finally {
+      setIsCheckingSheets(false);
+    }
+
+    // Jika koneksi sukses, langsung jalankan bot
+    executeStartBot(mode);
   };
 
   const handleStopBot = async () => {
@@ -218,15 +396,6 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Clean CSV Button */}
-          <button
-            onClick={handleCleanCsv}
-            disabled={isBotRunning}
-            className="px-4 py-2 rounded text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 disabled:opacity-50 transition"
-          >
-            🧼 Bersihkan CSV
-          </button>
-
           {/* Setup Browser Button */}
           <button
             onClick={handleToggleSetupBrowser}
@@ -279,7 +448,7 @@ export default function Home() {
       {/* Main Grid */}
       <main className="max-w-7xl mx-auto p-6">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-800 mb-6">
+        <div className="flex border-b border-slate-800 mb-6 flex-wrap">
           <button
             onClick={() => setActiveTab('config')}
             className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
@@ -288,7 +457,30 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            ⚙️ Konfigurasi
+            ⚙️ Konfigurasi Bot
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+              activeTab === 'profile'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            👤 Profil Pelamar
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('questions');
+              fetchQuestions();
+            }}
+            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+              activeTab === 'questions'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            📋 Database Pertanyaan (CSV)
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -421,6 +613,27 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Waktu Mulai Bekerja (Notice Period)
+                  </label>
+                  <select
+                    value={config.noticePeriod || 'Immediately'}
+                    onChange={(e) => setConfig({ ...config, noticePeriod: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Immediately">Immediately / Secepatnya (Default)</option>
+                    <option value="2 weeks">2 Minggu (2 weeks)</option>
+                    <option value="1 month">1 Bulan (1 month)</option>
+                    <option value="2 months">2 Bulan (2 months)</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Digunakan saat menjawab pertanyaan notice period / kapan bisa mulai bekerja di Glints & Jobstreet.
+                  </p>
+                </div>
+              </div>
+
               <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2 pt-4">
                 Integrasi Google Sheets API
               </h2>
@@ -488,7 +701,573 @@ export default function Home() {
             </form>
           )}
 
-          {/* TAB 2: LIVE LOGS */}
+          {/* TAB 2: CANDIDATE PROFILE */}
+          {activeTab === 'profile' && (
+            <form onSubmit={handleSaveConfig} className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
+                  👤 Profil Pelamar (Dijadikan Referensi Jawaban Pertanyaan)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Data ini digunakan oleh bot &amp; AI untuk menjawab pertanyaan kuisioner Glints &amp; JobStreet secara otomatis.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Nama Lengkap
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Yoga Adi Saputra"
+                    value={config.fullName || ''}
+                    onChange={(e) => setConfig({ ...config, fullName: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Gaji Bulanan yang Diharapkan (IDR)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Contoh: 8000000"
+                    value={config.expectedSalary || ''}
+                    onChange={(e) => setConfig({ ...config, expectedSalary: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Nilai IPK / GPA
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 3.75"
+                    value={config.gpa || ''}
+                    onChange={(e) => setConfig({ ...config, gpa: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Jenjang Pendidikan Terakhir
+                  </label>
+                  <select
+                    value={config.educationLevel || 'Sarjana (S1)'}
+                    onChange={(e) => setConfig({ ...config, educationLevel: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Sarjana (S1)">Sarjana (S1) / Bachelor Degree</option>
+                    <option value="Diploma (D3)">Diploma (D3)</option>
+                    <option value="Magister (S2)">Magister (S2) / Master Degree</option>
+                    <option value="SMA/SMK">SMA / SMK</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Total Pengalaman Kerja (Tahun)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Contoh: 3"
+                    value={config.yearsOfExperience || 3}
+                    onChange={(e) => setConfig({ ...config, yearsOfExperience: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Nomor Telepon / WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 081234567890"
+                    value={config.phoneNumber || ''}
+                    onChange={(e) => setConfig({ ...config, phoneNumber: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Link Portofolio / Website
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: https://github.com/yogaadi"
+                    value={config.portfolioUrl || ''}
+                    onChange={(e) => setConfig({ ...config, portfolioUrl: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Link GitHub
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: https://github.com/yogaadi"
+                    value={config.githubUrl || ''}
+                    onChange={(e) => setConfig({ ...config, githubUrl: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Link LinkedIn
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: https://www.linkedin.com/in/yoga-adi"
+                    value={config.linkedinUrl || ''}
+                    onChange={(e) => setConfig({ ...config, linkedinUrl: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Domisili / Lokasi Tempat Tinggal
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Jakarta Selatan, DKI Jakarta"
+                    value={config.domicile || ''}
+                    onChange={(e) => setConfig({ ...config, domicile: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Daftar Keahlian / Skills (Pisahkan dengan koma)
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Contoh: JavaScript, TypeScript, React, Next.js, Node.js, Express, Go, PostgreSQL, MySQL, RESTful API, Docker, Git"
+                  value={config.skills || ''}
+                  onChange={(e) => setConfig({ ...config, skills: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  💡 Setiap keahlian yang ada di daftar ini akan otomatis dijawab <strong>&quot;Ahli / Advanced&quot;</strong> pada pertanyaan matriks keahlian Glints.
+                </p>
+              </div>
+
+              {saveStatus && (
+                <div
+                  className={`p-3 rounded text-sm ${
+                    saveStatus.type === 'success'
+                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950 border border-rose-800 text-rose-300'
+                  }`}
+                >
+                  {saveStatus.message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded transition"
+              >
+                💾 Simpan Profil Pelamar
+              </button>
+            </form>
+          )}
+
+          {/* TAB 3: QUESTIONS CSV DATABASE */}
+          {activeTab === 'questions' && (
+            <div className="space-y-6">
+              {/* Header & Controls */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-200">
+                    📋 Database Pertanyaan Kuisioner ({questions.length} Pertanyaan)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    File: <code className="text-blue-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded">public/imploye-question.csv</code>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* View Mode Toggle */}
+                  <div className="bg-slate-900 border border-slate-800 rounded p-0.5 flex text-xs">
+                    <button
+                      onClick={() => setCsvViewMode('table')}
+                      className={`px-3 py-1.5 rounded transition font-medium ${
+                        csvViewMode === 'table' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      📊 Tabel Visual
+                    </button>
+                    <button
+                      onClick={() => setCsvViewMode('raw')}
+                      className={`px-3 py-1.5 rounded transition font-medium ${
+                        csvViewMode === 'raw' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      📝 Editor Mentah (CSV)
+                    </button>
+                  </div>
+
+                  {/* Add New Question Button */}
+                  <button
+                    onClick={() => setIsNewQuestionModalOpen(true)}
+                    className="px-3.5 py-1.5 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5"
+                  >
+                    ➕ Tambah Pertanyaan
+                  </button>
+
+                  {/* Clean Duplicate Questions Button */}
+                  <button
+                    onClick={handleCleanCsv}
+                    className="px-3.5 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
+                  >
+                    🧼 Bersihkan Duplikat
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Alert Banner */}
+              {csvSaveStatus && (
+                <div
+                  className={`p-3 rounded text-sm ${
+                    csvSaveStatus.type === 'success'
+                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950 border border-rose-800 text-rose-300'
+                  }`}
+                >
+                  {csvSaveStatus.message}
+                </div>
+              )}
+
+              {/* VIEW MODE 1: VISUAL TABLE */}
+              {csvViewMode === 'table' && (
+                <div className="space-y-4">
+                  {/* Search bar */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="🔍 Cari pertanyaan, tipe, atau jawaban..."
+                      value={questionSearch}
+                      onChange={(e) => setQuestionSearch(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    />
+                    {questionSearch && (
+                      <button
+                        onClick={() => setQuestionSearch('')}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded transition"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Questions Table */}
+                  <div className="overflow-x-auto rounded border border-slate-800">
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-900/80 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                        <tr>
+                          <th className="p-3 w-12 text-center">No</th>
+                          <th className="p-3">Pertanyaan</th>
+                          <th className="p-3 w-28">Tipe</th>
+                          <th className="p-3">Pilihan Opsi</th>
+                          <th className="p-3">Jawaban Bot</th>
+                          <th className="p-3 w-24 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-normal">
+                        {(() => {
+                          const filtered = questions.filter((q) => {
+                            if (!questionSearch.trim()) return true;
+                            const term = questionSearch.toLowerCase();
+                            return (
+                              q.question.toLowerCase().includes(term) ||
+                              q.answer.toLowerCase().includes(term) ||
+                              q.type.toLowerCase().includes(term) ||
+                              q.options.toLowerCase().includes(term)
+                            );
+                          });
+
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={6} className="p-8 text-center text-slate-500 italic">
+                                  {questionSearch
+                                    ? `Tidak ditemukan pertanyaan yang cocok dengan "${questionSearch}".`
+                                    : 'Belum ada pertanyaan di database CSV.'}
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filtered.map((item, idx) => {
+                            let typeBadge = 'bg-slate-800 text-slate-300 border-slate-700';
+                            if (item.type === 'radiobutton') typeBadge = 'bg-blue-950 text-blue-300 border-blue-800';
+                            if (item.type === 'checklist') typeBadge = 'bg-purple-950 text-purple-300 border-purple-800';
+                            if (item.type === 'text') typeBadge = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+                            if (item.type === 'dropdown') typeBadge = 'bg-amber-950 text-amber-300 border-amber-800';
+
+                            return (
+                              <tr key={item.id} className="hover:bg-slate-900/40 transition">
+                                <td className="p-3 text-center text-slate-500 text-xs font-mono">{idx + 1}</td>
+                                <td className="p-3 font-medium text-slate-200">{item.question}</td>
+                                <td className="p-3">
+                                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${typeBadge}`}>
+                                    {item.type || 'radiobutton'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-xs text-slate-400 max-w-xs truncate" title={item.options}>
+                                  {item.options || <span className="text-slate-600 italic">-</span>}
+                                </td>
+                                <td className="p-3">
+                                  <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 text-xs">
+                                    {item.answer}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => setEditingQuestion(item)}
+                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 p-1.5 rounded transition"
+                                      title="Edit Pertanyaan"
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteQuestion(item.id)}
+                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-rose-400 p-1.5 rounded transition"
+                                      title="Hapus Pertanyaan"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW MODE 2: RAW TEXTAREA EDITOR */}
+              {csvViewMode === 'raw' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Edit teks CSV langsung. Format: <code>Question,Type,Options,Answer</code></span>
+                    <button
+                      onClick={fetchQuestions}
+                      className="text-slate-400 hover:text-slate-200 underline transition"
+                    >
+                      🔄 Reload dari file
+                    </button>
+                  </div>
+                  <textarea
+                    rows={18}
+                    value={rawCsvText}
+                    onChange={(e) => setRawCsvText(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded p-4 font-mono text-xs text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed scrollbar-thin scrollbar-thumb-slate-800"
+                    placeholder="Question,Type,Options,Answer..."
+                  />
+                  <button
+                    onClick={handleSaveRawCsv}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded transition text-sm flex items-center gap-2"
+                  >
+                    💾 Simpan Perubahan CSV Mentah
+                  </button>
+                </div>
+              )}
+
+              {/* MODAL: TAMBAH PERTANYAAN BARU */}
+              {isNewQuestionModalOpen && (
+                <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <h3 className="text-base font-semibold text-slate-100">➕ Tambah Pertanyaan Baru</h3>
+                      <button
+                        onClick={() => setIsNewQuestionModalOpen(false)}
+                        className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleAddNewQuestion} className="space-y-4 text-sm">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Pertanyaan</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Contoh: What is your latest GPA?"
+                          value={newQuestionData.question}
+                          onChange={(e) => setNewQuestionData({ ...newQuestionData, question: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">Tipe Input</label>
+                          <select
+                            value={newQuestionData.type}
+                            onChange={(e) => setNewQuestionData({ ...newQuestionData, type: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="radiobutton">Radiobutton (Pilihan Tunggal)</option>
+                            <option value="text">Text / TextArea (Isian Bebas)</option>
+                            <option value="checklist">Checklist (Pilihan Ganda)</option>
+                            <option value="dropdown">Dropdown</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">Jawaban Bot</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Contoh: 3.75 atau Ahli"
+                            value={newQuestionData.answer}
+                            onChange={(e) => setNewQuestionData({ ...newQuestionData, answer: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-semibold text-emerald-400"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">
+                          Pilihan Opsi (Pisahkan dengan tanda | )
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Tidak Berpengalaman | Dasar | Menengah | Ahli"
+                          value={newQuestionData.options}
+                          onChange={(e) => setNewQuestionData({ ...newQuestionData, options: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                        />
+                        <p className="text-[11px] text-slate-500 mt-1">Kosongkan jika tipe input adalah Text / TextArea.</p>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setIsNewQuestionModalOpen(false)}
+                          className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                        >
+                          Simpan ke CSV
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL: EDIT PERTANYAAN */}
+              {editingQuestion && (
+                <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <h3 className="text-base font-semibold text-slate-100">✏️ Edit Pertanyaan &amp; Jawaban</h3>
+                      <button
+                        onClick={() => setEditingQuestion(null)}
+                        className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUpdateQuestion} className="space-y-4 text-sm">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Pertanyaan</label>
+                        <input
+                          type="text"
+                          required
+                          value={editingQuestion.question}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">Tipe Input</label>
+                          <select
+                            value={editingQuestion.type}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, type: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="radiobutton">Radiobutton (Pilihan Tunggal)</option>
+                            <option value="text">Text / TextArea (Isian Bebas)</option>
+                            <option value="checklist">Checklist (Pilihan Ganda)</option>
+                            <option value="dropdown">Dropdown</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">Jawaban Bot</label>
+                          <input
+                            type="text"
+                            required
+                            value={editingQuestion.answer}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, answer: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-semibold text-emerald-400"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">
+                          Pilihan Opsi (Pisahkan dengan tanda | )
+                        </label>
+                        <input
+                          type="text"
+                          value={editingQuestion.options}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, options: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setEditingQuestion(null)}
+                          className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                        >
+                          Simpan Perubahan
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: LIVE LOGS */}
           {activeTab === 'logs' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -605,6 +1384,42 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* Modal Peringatan Google Sheets Tidak Terkoneksi */}
+        {sheetsWarning?.open && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+            <div className="bg-slate-900 border border-amber-500/50 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center gap-3 text-amber-400">
+                <span className="text-3xl">⚠️</span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100">Peringatan: Google Sheets Tidak Terkoneksi</h3>
+                  <p className="text-xs text-amber-400/90 font-medium">Sistem gagal menghubungi server spreadsheet</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Bot mendeteksi bahwa sistem tidak dapat terhubung ke Google Sheets saat ini. Jika dilanjutkan, bot akan tetap melamar loker seperti biasa, namun riwayat lamaran <strong>tidak akan tercatat ke Spreadsheet</strong>.
+              </p>
+              <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-rose-300 max-h-36 overflow-y-auto break-all">
+                <span className="text-slate-500 block mb-1 font-semibold">Detail Log Error:</span>
+                {sheetsWarning.error}
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setSheetsWarning(null)}
+                  className="px-4 py-2 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                >
+                  🛑 Batal & Periksa Koneksi
+                </button>
+                <button
+                  onClick={() => executeStartBot(sheetsWarning.mode)}
+                  className="px-4 py-2 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-lg transition"
+                >
+                  ⚡ Tetap Lanjutkan (Tanpa Sheets)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

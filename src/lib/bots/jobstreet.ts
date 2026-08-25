@@ -263,7 +263,9 @@ export async function runJobstreetBot(page: any, config: any, onLog: (msg: strin
               const selectId = selectEl.id;
               const labelEl = labelElements.find(l => l.getAttribute('for') === selectId) || selectEl.closest('div')?.querySelector('label');
               const questionText = labelEl ? (labelEl.textContent || '').trim() : 'Select option';
-              const options = Array.from(selectEl.options).map(o => o.text.trim());
+              const options = Array.from(selectEl.options)
+                .map(o => o.text.trim())
+                .filter(t => t.length > 0 && !/select|pilih|choose|--/i.test(t));
               stepData.push({ id: selectId, question: questionText, type: 'dropdown', options });
             }
 
@@ -354,10 +356,18 @@ export async function runJobstreetBot(page: any, config: any, onLog: (msg: strin
                   if (selectEl && chosenAnswers.length > 0) {
                     const targetText = chosenAnswers[0];
                     let targetIndex = 0;
+                    let found = false;
                     for (let i = 0; i < selectEl.options.length; i++) {
                       if (selectEl.options[i].text.trim() === targetText) {
                         targetIndex = i;
+                        found = true;
                         break;
+                      }
+                    }
+                    if (!found && selectEl.options.length > 1) {
+                      const firstText = selectEl.options[0].text;
+                      if (/select|pilih|choose|--/i.test(firstText)) {
+                        targetIndex = 1;
                       }
                     }
                     selectEl.selectedIndex = targetIndex;
