@@ -113,31 +113,32 @@ export async function runJobstreetBot(
 
       onLog(`👷 Worker ${workerId + 1} started to process ${chunkUrls.length} jobs.`);
 
-      for (const url of chunkUrls) {
-        if (!global.isBotRunning) {
-          onLog(`🛑 Worker ${workerId + 1}: Stop signal detected. Exiting worker.`);
-          break;
-        }
+      const workerPage = await browser.newPage();
+      await workerPage.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+      await workerPage.setViewport({ width: 1280, height: 800 });
 
-        if (checkLimitReached()) {
-          onLog(`🛑 Worker ${workerId + 1}: Reached target limit (${successCount}/${targetLimit} applies). Skipping remaining.`);
-          break;
-        }
+      try {
+        for (const url of chunkUrls) {
+          if (!global.isBotRunning) {
+            onLog(`🛑 Worker ${workerId + 1}: Stop signal detected. Exiting worker.`);
+            break;
+          }
 
-        const alreadyApplied = await isJobAlreadyApplied(url);
-        if (alreadyApplied) {
-          onLog(`[Worker ${workerId + 1}] ⏩ Already applied (skipped): ${url}`);
-          alreadyAppliedCount++;
-          continue;
-        }
+          if (checkLimitReached()) {
+            onLog(`🛑 Worker ${workerId + 1}: Reached target limit (${successCount}/${targetLimit} applies). Skipping remaining.`);
+            break;
+          }
 
-        const workerPage = await browser.newPage();
-        await workerPage.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-        await workerPage.setViewport({ width: 1280, height: 800 });
+          const alreadyApplied = await isJobAlreadyApplied(url);
+          if (alreadyApplied) {
+            onLog(`[Worker ${workerId + 1}] ⏩ Already applied (skipped): ${url}`);
+            alreadyAppliedCount++;
+            continue;
+          }
 
-        let applyPage = workerPage;
+          let applyPage = workerPage;
 
-        try {
+          try {
           onLog(`[Worker ${workerId + 1}] 🔗 Opening Job: ${url}`);
           await workerPage.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
           await sleep(2000);
@@ -594,12 +595,14 @@ export async function runJobstreetBot(
           if (applyPage !== workerPage && !applyPage.isClosed()) {
             await applyPage.close().catch(() => {});
           }
-          if (!workerPage.isClosed()) {
-            await workerPage.close().catch(() => {});
-          }
         }
       }
-    });
+    } finally {
+      if (!workerPage.isClosed()) {
+        await workerPage.close().catch(() => {});
+      }
+    }
+  });
 
     await Promise.all(workerPromises);
     currentPage++;

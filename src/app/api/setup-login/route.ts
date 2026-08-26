@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
       global.activeSetupBrowser = browser;
 
-      // Open Glints, Jobstreet, and LinkedIn in separate tabs
+      // Open Glints, Jobstreet, LinkedIn, and Indeed in separate tabs
       const pages = await browser.pages();
       const page1 = pages[0] || await browser.newPage();
       page1.goto('https://glints.com/id/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
@@ -56,6 +56,9 @@ export async function POST(request: Request) {
 
       const page3 = await browser.newPage();
       page3.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
+
+      const page4 = await browser.newPage();
+      page4.goto('https://secure.indeed.com/auth', { waitUntil: 'domcontentloaded' }).catch(() => {});
 
       browser.on('disconnected', () => {
         global.activeSetupBrowser = null;

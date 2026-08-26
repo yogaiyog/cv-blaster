@@ -14,9 +14,11 @@ interface AppConfig {
   limitGlints?: number;
   limitJobstreet?: number;
   limitLinkedin?: number;
+  limitIndeed?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
   enableLinkedin?: boolean;
+  enableIndeed?: boolean;
   debugTest: boolean;
   concurrency: number;
   noticePeriod?: string;
@@ -65,9 +67,11 @@ export default function Home() {
     limitGlints: 80,
     limitJobstreet: 75,
     limitLinkedin: 50,
+    limitIndeed: 50,
     enableGlints: true,
     enableJobstreet: true,
     enableLinkedin: true,
+    enableIndeed: true,
     debugTest: true,
     concurrency: 3,
     noticePeriod: 'Immediately',
@@ -411,7 +415,7 @@ export default function Home() {
             CV Blaster Dashboard
           </span>
           <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-            v1.0 (Glints & Jobstreet)
+            v1.0 (Glints, Jobstreet, LinkedIn, Indeed)
           </span>
         </div>
 
@@ -569,6 +573,15 @@ export default function Home() {
                   />
                   <span className="text-sm font-medium text-slate-300">Aktifkan LinkedIn</span>
                 </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.enableIndeed}
+                    onChange={(e) => setConfig({ ...config, enableIndeed: e.target.checked })}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-300">Aktifkan Indeed</span>
+                </label>
 
                 {/* Separator */}
                 <div className="h-5 w-px bg-slate-800 hidden md:block"></div>
@@ -678,13 +691,13 @@ export default function Home() {
                           className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
                         />
                       </div>
-                      <p className="text-xs text-slate-400 mt-5">
-                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet + LinkedIn maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
-                      </p>
+                      <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-400">
+                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet + LinkedIn + Indeed maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
                     <div>
                       <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
                         Limit Khusus Glints
@@ -723,6 +736,19 @@ export default function Home() {
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500 font-bold"
                       />
                       <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitLinkedin || 50} lowongan di LinkedIn.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
+                        Limit Khusus Indeed
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.limitIndeed || 50}
+                        onChange={(e) => setConfig({ ...config, limitIndeed: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-bold"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitIndeed || 50} lowongan di Indeed.</p>
                     </div>
                   </div>
                 )}
@@ -1513,7 +1539,11 @@ export default function Home() {
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 job.platform === 'Glints'
                                   ? 'bg-blue-950 text-blue-400 border border-blue-900'
-                                  : 'bg-purple-950 text-purple-400 border border-purple-900'
+                                  : job.platform === 'Jobstreet'
+                                  ? 'bg-purple-950 text-purple-400 border border-purple-900'
+                                  : job.platform === 'LinkedIn'
+                                  ? 'bg-sky-950 text-sky-400 border border-sky-900'
+                                  : 'bg-emerald-950 text-emerald-400 border border-emerald-900'
                               }`}
                             >
                               {job.platform}

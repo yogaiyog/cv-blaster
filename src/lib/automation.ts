@@ -3,6 +3,7 @@ import { getConfig } from './config';
 import { runGlintsBot } from './bots/glints';
 import { runJobstreetBot } from './bots/jobstreet';
 import { runLinkedinBot } from './bots/linkedin';
+import { runIndeedBot } from './bots/indeed';
 
 declare global {
   var isBotRunning: boolean;
@@ -116,6 +117,19 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       }
     };
 
+    const indeedLimiter = {
+      getTargetLimit: () => isSharedMode ? sharedLimitTarget : (config.limitIndeed || config.limitPerDay || 50),
+      isLimitReached: (currentIndeedSuccess: number) => {
+        if (isSharedMode) {
+          return totalSuccess >= sharedLimitTarget;
+        }
+        return currentIndeedSuccess >= (config.limitIndeed || config.limitPerDay || 50);
+      },
+      onJobSuccess: () => {
+        totalSuccess++;
+      }
+    };
+
     const initialPages = await browser.pages();
     let initialPageUsed = false;
 
@@ -204,12 +218,37 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       onLog('⏩ LinkedIn dinonaktifkan di pengaturan.');
     }
 
+    // ----------------------------------------------------
+    // TAB 4: INDEED AUTOMATION
+    // ----------------------------------------------------
+    if (config.enableIndeed) {
+      tasks.push((async () => {
+        const pageIndeed = await getOrNewPage();
+        await pageIndeed.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const indeedLog = (msg: string) => onLog(`[Indeed] ${msg}`);
+
+        indeedLog('🔍 Memulai proses bot Indeed di Tab khusus...');
+        try {
+          const metrics = await runIndeedBot(pageIndeed, config, indeedLog, indeedLimiter);
+          totalAlreadyApplied += metrics.alreadyAppliedCount;
+          totalErrors += metrics.errorCount;
+        } catch (err: any) {
+          indeedLog(`❌ Error: ${err.message || err}`);
+          totalErrors++;
+        } finally {
+          try { await pageIndeed.close(); } catch {}
+        }
+      })());
+    } else {
+      onLog('⏩ Indeed dinonaktifkan di pengaturan.');
+    }
+
     // Tunggu semua tab platform selesai bekerja
     if (tasks.length > 0) {
       onLog(`🚀 Menjalankan ${tasks.length} tab platform secara bersamaan...`);
       await Promise.allSettled(tasks);
     } else {
-      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints, Jobstreet & LinkedIn semuanya nonaktif).');
+      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints, Jobstreet, LinkedIn & Indeed semuanya nonaktif).');
     }
 
     onLog('--------------------------------------------------');

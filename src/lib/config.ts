@@ -13,9 +13,11 @@ export interface AppConfig {
   limitGlints?: number;
   limitJobstreet?: number;
   limitLinkedin?: number;
+  limitIndeed?: number;
   enableGlints: boolean;
   enableJobstreet: boolean;
   enableLinkedin: boolean;
+  enableIndeed: boolean;
   debugTest: boolean;
   concurrency: number;
   noticePeriod: string;
@@ -42,14 +44,16 @@ const DEFAULT_CONFIG: AppConfig = {
   searchKeywords: '',
   location: '',
   minSalary: '',
-  limitPerDay: 155,
+  limitPerDay: 200,
   limitMode: 'shared',
   limitGlints: 80,
   limitJobstreet: 75,
   limitLinkedin: 50,
+  limitIndeed: 50,
   enableGlints: true,
   enableJobstreet: true,
   enableLinkedin: true,
+  enableIndeed: true,
   debugTest: true,
   concurrency: 3,
   noticePeriod: 'Immediately',
