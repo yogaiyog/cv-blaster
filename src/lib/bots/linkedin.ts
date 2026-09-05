@@ -74,10 +74,10 @@ export async function runLinkedinBot(
     const checkLimitReached = () => sharedLimiter ? sharedLimiter.isLimitReached(successCount) : successCount >= targetLimit;
 
     let currentPage = 1;
-    const maxPages = Math.max(1, Math.ceil(targetLimit / 15) + 3);
+    const maxPages = Math.max(30, Math.ceil(targetLimit * 3));
     const processedJobIds = new Set<string>();
 
-    while (currentPage <= maxPages && global.isBotRunning && !checkLimitReached()) {
+    while (currentPage <= maxPages && global.isBotRunning !== false && !checkLimitReached()) {
       onLog('==================================================');
       onLog(`📄 Memproses Halaman Pencarian LinkedIn ke-${currentPage}...`);
 

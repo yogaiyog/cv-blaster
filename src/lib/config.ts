@@ -18,8 +18,11 @@ export interface AppConfig {
   enableJobstreet: boolean;
   enableLinkedin: boolean;
   enableIndeed: boolean;
+  indeedNoJobTitleFilter?: boolean;
   debugTest: boolean;
   concurrency: number;
+  useSystemChrome?: boolean;
+  customChromePath?: string;
   noticePeriod: string;
   // Candidate Profile Fields
   fullName: string;
@@ -54,8 +57,11 @@ const DEFAULT_CONFIG: AppConfig = {
   enableJobstreet: true,
   enableLinkedin: true,
   enableIndeed: true,
+  indeedNoJobTitleFilter: false,
   debugTest: true,
   concurrency: 3,
+  useSystemChrome: true,
+  customChromePath: '',
   noticePeriod: 'Immediately',
   fullName: 'Yoga Adi Saputra',
   expectedSalary: 8000000,

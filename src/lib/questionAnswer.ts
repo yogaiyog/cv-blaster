@@ -314,7 +314,9 @@ function closestExperienceOption(options: string[], years: number): string {
 }
 
 function yearsForRole(question: string): number {
+  const cfg = getConfig();
   const profile = getDynamicProfile();
+  const defaultYrs = Number(cfg.yearsOfExperience) || profile.defaultExperienceYears || 3;
   const lower = question.toLowerCase();
 
   // 1. Cek specific role keywords
@@ -324,42 +326,12 @@ function yearsForRole(question: string): number {
     }
   }
 
-  // 2. Cek apakah pertanyaan menanyakan skill/teknologi tertentu:
-  // Contoh: "How many years of work experience do you have with Unity?"
-  // Contoh: "Berapa tahun pengalaman menggunakan Golang?"
-  const skillExtractMatch = question.match(/(?:with|using|in|menggunakan|pada|dengan)\s+([A-Za-z0-9#+.\s-]+)\??$/i) ||
-                            question.match(/(?:experience with|pengalaman dengan|pengalaman)\s+([A-Za-z0-9#+.\s-]+)\??$/i);
-
-  const userSkills = getDynamicSkills().map(s => s.toLowerCase());
-
-  if (skillExtractMatch) {
-    const extractedSkill = skillExtractMatch[1].trim().toLowerCase();
-    const hasSkill = userSkills.some(s => 
-      s === extractedSkill || 
-      extractedSkill.includes(s) || 
-      s.includes(extractedSkill)
-    );
-
-    if (!hasSkill) {
-      // Jika kandidat TIDAK memiliki skill tersebut di profil (misal Unity, Unreal, Ruby), kembalikan 0
-      return 0;
-    }
-    return profile.defaultExperienceYears;
+  // 2. Pertanyaan tentang QA, testing, automation, development, IT, software
+  if (/software|qa|quality|testing|test|automation|developer|programmer|engineer|it|tech|lead|frontend|backend|fullstack|web|data|system/i.test(lower)) {
+    return defaultYrs;
   }
 
-  // 3. Jika pertanyaan umum tentang total tahun pengalaman kerja
-  if (/total|overall|keseluruhan|umum|semua/i.test(lower) || /software engineer|developer|programmer/i.test(lower)) {
-    return profile.defaultExperienceYears;
-  }
-
-  // 4. Cek apakah ada nama skill yang cocok di dalam seluruh pertanyaan
-  const mentionsKnownSkill = userSkills.some(s => s.length > 2 && lower.includes(s));
-  if (mentionsKnownSkill) {
-    return profile.defaultExperienceYears;
-  }
-
-  // Jika skill tidak ada di profil -> 0 tahun
-  return 0;
+  return defaultYrs;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,15 +347,160 @@ function tryRegexAnswer(
   const profile = getDynamicProfile();
   const dynamicSkills = getDynamicSkills();
 
+  const cfg = getConfig();
+  const fullName = (cfg.fullName || "Yoga Adi Saputra").trim();
+  const nameParts = fullName.split(/\s+/);
+  const firstName = nameParts[0] || "Yoga";
+  const lastName = nameParts.slice(1).join(" ") || "Adi Saputra";
+
+  // 1. Profil Pribadi: First Name, Last Name, Full Name
+  if (/^(?:first\s*name|given\s*name|nama\s*depan)(\s*\*|\s*:)?$/i.test(q) || /(?:first|given)\s*name|nama\s*depan/i.test(q)) {
+    return [firstName];
+  }
+
+  if (/^(?:last\s*name|family\s*name|surname|nama\s*belakang)(\s*\*|\s*:)?$/i.test(q) || /(?:last|family|sur)\s*name|nama\s*belakang/i.test(q)) {
+    return [lastName];
+  }
+
+  if (/^(?:full\s*name|nama\s*lengkap)(\s*\*|\s*:)?$/i.test(q)) {
+    return [fullName];
+  }
+
+  // 2. Kontak: Nomor Telepon, Handphone, Mobile, WhatsApp
+  if (/^(?:phone|telephone|mobile|handphone|nomor\s*hp|nomor\s*telepon|nomor\s*wa|whatsapp|telp)(\s*\*|\s*:)?$/i.test(q) || /\b(phone|mobile|telepon|handphone|hp)\b/i.test(q)) {
+    return [cfg.phoneNumber || "081234567890"];
+  }
+
+  // 3. Email
+  if (/^(?:email|surel|alamat\s*email|e-mail)(\s*\*|\s*:)?$/i.test(q)) {
+    return ["yogaadi0902@gmail.com"];
+  }
+
+  // 4. Umur / Usia / Age
+  if (/^(?:age|umur|usia)(\s*\*|\s*:)?$/i.test(q) || /\b(umur|usia)\b|^age$/i.test(q)) {
+    return ["24"];
+  }
+
+  // 5. Negara / Country / Kewarganegaraan
+  if (/^(?:country|negara|nationality|kewarganegaraan)(\s*\*|\s*:)?$/i.test(q) || /country|negara/i.test(q)) {
+    if (options.length > 0) {
+      const match = options.find(o => /^(indonesia|indonesian|wni)$/i.test(o.trim())) || options.find(o => /indonesia/i.test(o));
+      if (match) return [match];
+    }
+    return ["Indonesia"];
+  }
+
+  // 6. Kota / Lokasi / Alamat / Kode Pos
+  if (/^(?:city|kota|kabupaten|lokasi|domisili)(\s*\*|\s*:)?$/i.test(q)) {
+    if (options.length > 0) {
+      const match = options.find(o => /jakarta/i.test(o));
+      if (match) return [match];
+    }
+    return [cfg.location || cfg.domicile || "Jakarta"];
+  }
+
+  if (/(?:street\s*address|address|alamat|street|domisili)/i.test(q)) {
+    return [cfg.domicile || "Jakarta Selatan, DKI Jakarta"];
+  }
+
+  if (/^(?:postal\s*code|zip\s*code|kode\s*pos)(\s*\*|\s*:)?$/i.test(q)) {
+    return ["12190"];
+  }
+
+  // 7. Pemilihan Resume / CV (Indeed / Glints / JobStreet)
+  if (options.some(o => /resume|cv|\.pdf/i.test(o))) {
+    const indeedResumeMatch = options.find(o => /use your indeed resume|indeed resume/i.test(o));
+    if (indeedResumeMatch) return [indeedResumeMatch];
+
+    const pdfCandidateMatch = options.find(o => /yoga|ats_cv|\.pdf/i.test(o) && !/don't include|tidak sertakan/i.test(o));
+    if (pdfCandidateMatch) return [pdfCandidateMatch];
+
+    const anyValidResume = options.find(o => !/don't include|tidak sertakan|batal/i.test(o));
+    if (anyValidResume) return [anyValidResume];
+  }
+
+  // 8. Gender / Jenis Kelamin
+  if (/gender|jenis\s*kelamin/i.test(q)) {
+    if (options.length > 0) {
+      const match = options.find(o => /laki-laki|male|pria/i.test(o));
+      if (match) return [match];
+    }
+    return ["Laki-laki"];
+  }
+
+  // 9. Status Pernikahan / Marital Status (e.g. Single, Belum Menikah)
+  if (/marital|pernikahan|status\s*perkawinan|status\s*nikah/i.test(q) || options.some(o => /single|lajang|belum\s*menikah/i.test(o))) {
+    if (options.length > 0) {
+      const match = options.find(o => /^(single|lajang|belum\s*menikah)$/i.test(o.trim())) || options.find(o => /single|lajang|belum\s*menikah/i.test(o));
+      if (match) return [match];
+    }
+    return ["Single"];
+  }
+
+  // 10. Pertanyaan Demografis / EEO / Keberagaman (Demographic, Disability, Veteran, Race, Consent)
+  if (/demographic|ras|ethnicity|etnis|race|veteran|disability|disabilitas|difabel|sukarela|voluntary|declaration|persetujuan|consent/i.test(q)) {
+    if (options.length > 0) {
+      const declineMatch = options.find(o => /prefer not to say|decline|tidak ingin menjawab|rahasia|tidak berkenan/i.test(o));
+      if (declineMatch) return [declineMatch];
+
+      const noMatch = options.find(o => /^(no|tidak|i am not|saya bukan|tidak ada)$/i.test(o.trim())) || options.find(o => /tidak|no/i.test(o));
+      if (noMatch) return [noMatch];
+
+      const asianMatch = options.find(o => /asian|asia|indonesia/i.test(o));
+      if (asianMatch) return [asianMatch];
+
+      return [options[0]];
+    }
+    return ["Yes"];
+  }
+
+  // 11. Bahasa / English Language Skills
+  if (/bahasa\s*inggris|english|bahasa|language/i.test(q)) {
+    if (options.length > 0) {
+      const match = options.find(o => /^(ya|yes|bisa|fluent|proficient|aktif|advanced)$/i.test(o.trim())) || options.find(o => /ya|yes|fluent|bisa/i.test(o));
+      if (match) return [match];
+    }
+    return ["Ya"];
+  }
+
+  // 12. Tingkat Pendidikan Tertinggi (S1 / Sarjana / Bachelor)
+  if (/tingkat\s*pendidikan|pendidikan\s*tertinggi|education\s*level|highest\s*education|kualifikasi\s*pendidikan/i.test(q)) {
+    if (options.length > 0) {
+      const s1Match = options.find(o => /^(s1|sarjana|bachelor|s1\s*\(sarjana\))$/i.test(o.trim())) || options.find(o => /s1|sarjana|bachelor/i.test(o));
+      if (s1Match) return [s1Match];
+      const generalMatch = options.find(o => o.toLowerCase().includes('s1') || o.toLowerCase().includes('sarjana') || o.toLowerCase().includes('bachelor'));
+      if (generalMatch) return [generalMatch];
+    }
+    return ["S1"];
+  }
+
+  // 13. Open-ended Experience Questions (Playwright, Selenium, CI/CD, Automated Testing)
+  if (/do you have experience|apakah anda memiliki pengalaman|apakah anda berpengalaman|do you have experince/i.test(q)) {
+    if (options.length > 0) {
+      const match = options.find(o => /^(ya|yes)$/i.test(o.trim())) || options.find(o => /ya|yes/i.test(o));
+      if (match) return [match];
+    }
+    if (/playwright|selenium/i.test(q)) {
+      return ["Yes, I have extensive experience using Playwright and Selenium for web automation and E2E testing."];
+    }
+    if (/ci\/cd|jenkins|github\s*actions|pipeline/i.test(q)) {
+      return ["Yes, I have experience integrating automated testing suites into CI/CD pipelines using GitHub Actions and Jenkins."];
+    }
+    if (/testcomplete/i.test(q)) {
+      return ["Yes, I have experience implementing automated testing frameworks and software quality assurance."];
+    }
+    return ["Yes, I have strong relevant experience in software development and testing."];
+  }
+
   if (/salary|gaji/.test(q) && options.length > 0) {
     return [closestSalaryOption(options, profile.expectedMonthlySalaryIDR)];
   }
 
   if (/qualification|kualifikasi/.test(q)) {
     const match = options.find((o) =>
-      o.toLowerCase().includes(profile.educationLevel.toLowerCase())
+      o.toLowerCase().includes(profile.educationLevel.toLowerCase()) || /s1|sarjana/i.test(o)
     );
-    return match ? [match] : null;
+    return match ? [match] : ["S1"];
   }
 
   // Pertanyaan angka tahun pengalaman (hanya jika murni menanyakan durasi angka dan bukan deskripsi project/cerita)
@@ -579,6 +696,7 @@ async function askLLM(
 ): Promise<string[]> {
   const profile = getDynamicProfile();
   const dynamicSkills = getDynamicSkills();
+  const cfg = getConfig();
 
   if (type === "text" || options.length === 0) {
     const prompt = `You are answering a job application screening question on behalf of a candidate.
@@ -611,12 +729,15 @@ Reply with a concise, highly professional, direct answer (1-2 sentences maximum,
     }
     if (/english|bahasa inggris|rate|1 to 10/i.test(lowerQ)) return ["8"];
     if (/gpa|ipk/i.test(lowerQ)) return [profile.gpa || "3.75"];
-    if (/salary|gaji/i.test(lowerQ)) return [String(profile.expectedMonthlySalaryIDR || 8000000)];
     if (/experience|tahun/i.test(lowerQ)) return [String(profile.defaultExperienceYears || 3)];
+    if (/project|proyek/i.test(lowerQ)) return ["4"];
+    if (/age|umur|usia/i.test(lowerQ)) return ["24"];
+    if (/phone|telepon|hp|mobile/i.test(lowerQ)) return [cfg.phoneNumber || "081234567890"];
+    if (/name|nama/i.test(lowerQ)) return [cfg.fullName || "Yoga Adi Saputra"];
     if (/why|alasan|describe|ceritakan|jelaskan|introduce/i.test(lowerQ)) {
-      return ["I have 3+ years of experience as a Full Stack Developer specializing in React, Next.js, Node.js, TypeScript, and PostgreSQL building scalable applications."];
+      return ["I have 3+ years of experience as a Software Engineer specializing in full stack web development, building robust and scalable applications."];
     }
-    return ["Saya bersedia untuk segera bergabung (ASAP / Immediately)."];
+    return ["Yes"];
   }
 
   const multiSelect = type === "checklist";

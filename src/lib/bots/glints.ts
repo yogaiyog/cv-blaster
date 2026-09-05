@@ -239,7 +239,7 @@ export async function runGlintsBot(
 
     const processedJobUrls = new Set<string>();
 
-    while (currentPage <= maxPages && global.isBotRunning && !checkLimitReached()) {
+    while (currentPage <= maxPages && global.isBotRunning !== false && !checkLimitReached()) {
       if (currentPage > 1) {
         const pageSearchUrl = `${baseSearchUrl}${urlSeparator}page=${currentPage}`;
         onLog('==================================================');

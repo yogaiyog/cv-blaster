@@ -19,8 +19,11 @@ interface AppConfig {
   enableJobstreet: boolean;
   enableLinkedin?: boolean;
   enableIndeed?: boolean;
+  indeedNoJobTitleFilter?: boolean;
   debugTest: boolean;
   concurrency: number;
+  useSystemChrome?: boolean;
+  customChromePath?: string;
   noticePeriod?: string;
   // Candidate Profile fields
   fullName?: string;
@@ -72,8 +75,11 @@ export default function Home() {
     enableJobstreet: true,
     enableLinkedin: true,
     enableIndeed: true,
+    indeedNoJobTitleFilter: false,
     debugTest: true,
     concurrency: 3,
+    useSystemChrome: true,
+    customChromePath: '',
     noticePeriod: 'Immediately',
     fullName: 'Yoga Adi Saputra',
     expectedSalary: 8000000,
@@ -319,7 +325,7 @@ export default function Home() {
     setSheetsWarning(null);
     if (isBotRunning) return;
 
-    setLogs([]);
+    setLogs([`[${new Date().toLocaleTimeString()}] 🚀 Menghubungkan ke Bot Engine (${mode.toUpperCase()})...`]);
     setIsBotRunning(true);
     setActiveTab('logs');
 
@@ -343,36 +349,8 @@ export default function Home() {
     };
   };
 
-  const handleStartBot = async (mode: 'headless' | 'headful' = 'headless') => {
-    if (isBotRunning || isCheckingSheets) return;
-
-    setIsCheckingSheets(true);
-    try {
-      const res = await fetch('/api/test-sheets');
-      const data = await res.json();
-
-      if (!data.success) {
-        setSheetsWarning({
-          open: true,
-          error: data.error || 'Tidak dapat terhubung ke Google Sheets.',
-          mode
-        });
-        setIsCheckingSheets(false);
-        return;
-      }
-    } catch (err: any) {
-      setSheetsWarning({
-        open: true,
-        error: err.message || 'Gagal menghubungi server untuk verifikasi Google Sheets.',
-        mode
-      });
-      setIsCheckingSheets(false);
-      return;
-    } finally {
-      setIsCheckingSheets(false);
-    }
-
-    // Jika koneksi sukses, langsung jalankan bot
+  const handleStartBot = (mode: 'headless' | 'headful' = 'headless') => {
+    if (isBotRunning) return;
     executeStartBot(mode);
   };
 
@@ -597,9 +575,23 @@ export default function Home() {
                 </label>
               </div>
 
-              <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
-                Filter Pencarian Pekerjaan
-              </h2>
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2 flex-wrap gap-2">
+                <h2 className="text-lg font-semibold text-slate-200">
+                  Filter Pencarian Pekerjaan
+                </h2>
+                <label className="flex items-center gap-2 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition">
+                  <input
+                    type="checkbox"
+                    checked={config.indeedNoJobTitleFilter || false}
+                    onChange={(e) => setConfig({ ...config, indeedNoJobTitleFilter: e.target.checked })}
+                    className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span className="text-xs font-semibold text-emerald-400">
+                    Indeed: Tanpa Filter Job Title (Cari Semua Loker)
+                  </span>
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
@@ -607,7 +599,7 @@ export default function Home() {
                   </label>
                   <input
                     type="text"
-                    required
+                    required={!config.indeedNoJobTitleFilter}
                     placeholder="Contoh: React Developer, Node JS, Frontend"
                     value={config.searchKeywords}
                     onChange={(e) => setConfig({ ...config, searchKeywords: e.target.value })}
@@ -751,6 +743,67 @@ export default function Home() {
                       <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitIndeed || 50} lowongan di Indeed.</p>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Pengaturan Mesin Browser (Google Chrome / Fallback) */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200">🌐 Mesin Browser & Anti-Bot</h3>
+                    <p className="text-xs text-slate-400">Pilih browser untuk menjalankan bot dan setup login (disarankan Google Chrome Asli).</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, useSystemChrome: true })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                        config.useSystemChrome !== false
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🟢 Google Chrome Asli (Auto-Fallback)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, useSystemChrome: false })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                        config.useSystemChrome === false
+                          ? 'bg-amber-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🟡 Chromium Bawaan
+                    </button>
+                  </div>
+                </div>
+
+                {config.useSystemChrome !== false ? (
+                  <div className="space-y-2 text-xs text-slate-300">
+                    <p className="text-emerald-400 font-medium">
+                      ✓ Prioritas 1: Membuka Google Chrome resmi sistem dengan proteksi anti-bot penuh (Widevine, real codecs).
+                    </p>
+                    <p className="text-slate-400">
+                      ✓ Prioritas 2 (Fallback): Jika Google Chrome gagal terbuka, otomatis beralih ke Chromium bawaan dengan tetap mempertahankan sesi pada folder <code className="text-slate-300 bg-slate-950 px-1 py-0.5 rounded">automation-profile/</code>.
+                    </p>
+                    <div className="pt-2">
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                        Custom Chrome Executable Path (Opsional - Kosongkan jika ingin auto-detect)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh MacOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                        value={config.customChromePath || ''}
+                        onChange={(e) => setConfig({ ...config, customChromePath: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-400">
+                    ⚠️ Bot akan selalu dijalankan menggunakan engine Chromium bawaan Puppeteer.
+                  </p>
                 )}
               </div>
 

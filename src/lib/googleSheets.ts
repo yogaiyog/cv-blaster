@@ -62,7 +62,10 @@ export async function getAppliedJobs(forceRefresh = false): Promise<Array<{ comp
     const urlSet = new Set<string>();
     data.forEach((j) => {
       const cleaned = cleanJobUrl(j.jobUrl);
-      if (cleaned) urlSet.add(cleaned);
+      // Hindari memasukkan URL generik tanpa ID unik (misal hanya https://id.indeed.com/viewjob)
+      if (cleaned && !cleaned.endsWith('/viewjob') && !cleaned.endsWith('/jobs')) {
+        urlSet.add(cleaned);
+      }
     });
 
     inMemoryAppliedJobs = {
@@ -90,9 +93,29 @@ export function cleanJobUrl(url: string): string {
   if (!url) return '';
   try {
     const urlObj = new URL(url);
-    return `${urlObj.origin}${urlObj.pathname}`;
+
+    // Indeed: Identifier unik pekerjaan berada pada query parameter 'jk' atau 'vjk'
+    if (urlObj.hostname.includes('indeed.com')) {
+      const jk = urlObj.searchParams.get('jk') || urlObj.searchParams.get('vjk');
+      if (jk) {
+        return `https://${urlObj.hostname}/viewjob?jk=${jk}`;
+      }
+      return url.trim();
+    }
+
+    // LinkedIn: Jika menggunakan URL search dengan query parameter currentJobId
+    if (urlObj.hostname.includes('linkedin.com')) {
+      const currentJobId = urlObj.searchParams.get('currentJobId');
+      if (currentJobId) {
+        return `https://www.linkedin.com/jobs/view/${currentJobId}`;
+      }
+      return `${urlObj.origin}${urlObj.pathname.replace(/\/+$/, '')}`;
+    }
+
+    // Platform lain (Glints, JobStreet): Pathname adalah identitas unik
+    return `${urlObj.origin}${urlObj.pathname.replace(/\/+$/, '')}`;
   } catch (e) {
-    return url;
+    return url.trim();
   }
 }
 

@@ -40,8 +40,8 @@ export async function runJobstreetBot(
   const formattedKeywords = config.searchKeywords.trim().toLowerCase().replace(/\s+/g, '-');
   const formattedLocation = (config.location || '').trim().toLowerCase().replace(/\s+/g, '-');
   const searchUrl = formattedLocation 
-    ? `https://id.jobstreet.com/${formattedKeywords}-jobs/in-${formattedLocation}`
-    : `https://id.jobstreet.com/${formattedKeywords}-jobs`;
+    ? `https://id.jobstreet.com/id/${formattedKeywords}-jobs/in-${formattedLocation}`
+    : `https://id.jobstreet.com/id/${formattedKeywords}-jobs`;
 
   const baseSearchUrl = searchUrl.replace(/[?&]page=\d+/, '');
   const urlSeparator = baseSearchUrl.includes('?') ? '&' : '?';
@@ -53,7 +53,7 @@ export async function runJobstreetBot(
 
   const processedUrls = new Set<string>();
 
-  while (currentPage <= maxPages && global.isBotRunning && !checkLimitReached()) {
+  while (currentPage <= maxPages && global.isBotRunning !== false && !checkLimitReached()) {
     const pageSearchUrl = currentPage === 1 ? searchUrl : `${baseSearchUrl}${urlSeparator}page=${currentPage}`;
     onLog('==================================================');
     onLog(`📄 Membuka Halaman Pencarian Jobstreet ke-${currentPage}: ${pageSearchUrl}`);
@@ -159,14 +159,76 @@ export async function runJobstreetBot(
 
           onLog(`[Worker ${workerId + 1}] 💼 Job: "${jobDetails.title}" at "${jobDetails.company}"`);
 
-          // Find and click Apply Now button on Jobstreet
-          const applyBtnText = await workerPage.evaluate(() => {
-            const applyBtn = document.querySelector('[data-automation="apply-now"], a[href*="/apply"]');
-            return applyBtn ? (applyBtn.textContent || '').trim() : '';
+          // Find Apply button and verify status on Jobstreet
+          const applyBtnStatus = await workerPage.evaluate(() => {
+            const findApplyElement = (): HTMLElement | null => {
+              // 1. Priority by data-automation attributes
+              const prioritySelectors = [
+                '[data-automation="job-detail-apply"]',
+                '[data-automation="apply-now"]',
+                '[data-automation="job-detail-apply-button"]',
+                '[data-testid="apply-button"]',
+                'a[href*="/apply"]'
+              ];
+              for (const sel of prioritySelectors) {
+                const el = document.querySelector(sel) as HTMLElement;
+                if (el) return el;
+              }
+
+              // 2. Priority by specific text ("Lamar Cepat", "Quick Apply", etc.)
+              const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]')) as HTMLElement[];
+              const exactMatch = candidates.find(el => {
+                const txt = (el.textContent || '').trim();
+                return /^(Lamar Cepat|Quick Apply|Lamar Sekarang|Apply Now)$/i.test(txt);
+              });
+              if (exactMatch) return exactMatch;
+
+              // 3. Fallback text search for Apply/Lamar
+              return candidates.find(el => {
+                const txt = (el.textContent || '').trim();
+                return /Lamar Cepat|Quick Apply|Lamar Sekarang|Apply Now/i.test(txt) || /^(Lamar|Apply)$/i.test(txt);
+              }) || null;
+            };
+
+            const btn = findApplyElement();
+            if (!btn) return { exists: false, text: '', isAlreadyApplied: false, isExternal: false };
+
+            const buttonText = (btn.textContent || '').trim();
+            const href = btn.getAttribute('href') || '';
+
+            // Check if already applied
+            const isAlreadyApplied = /Applied|Dilamar|Sudah Dilamar/i.test(buttonText);
+
+            // Check if external redirect
+            let isExternal = false;
+            if (/situs perusahaan|company website|employer site|situs web/i.test(buttonText)) {
+              isExternal = true;
+            } else if (href.startsWith('http')) {
+              try {
+                const parsedUrl = new URL(href);
+                const hostname = parsedUrl.hostname.toLowerCase();
+                if (!hostname.includes('jobstreet') && !hostname.includes('seek')) {
+                  isExternal = true;
+                }
+              } catch {}
+            }
+
+            // If it's explicitly "Lamar Cepat" / "Quick Apply", it's always internal
+            if (/Lamar Cepat|Quick Apply/i.test(buttonText)) {
+              isExternal = false;
+            }
+
+            return { exists: true, text: buttonText, isAlreadyApplied, isExternal };
           });
 
-          if (/Applied|Dilamar/i.test(applyBtnText)) {
-            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet detected already applied on site: ${url}`);
+          if (!applyBtnStatus.exists) {
+            onLog(`[Worker ${workerId + 1}] ❌ Tombol Lamar / Apply TIDAK ditemukan untuk: ${url}`);
+            errorCount++;
+            continue;
+          }
+
+          if (applyBtnStatus.isAlreadyApplied) {
+            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Sudah pernah dilamar sebelumnya (${applyBtnStatus.text}): ${url}`);
             await addAppliedJob({ 
               company: jobDetails.company || 'Jobstreet Company', 
               title: jobDetails.title || 'Jobstreet Job', 
@@ -178,52 +240,19 @@ export async function runJobstreetBot(
             continue;
           }
 
-          // Check if apply button exists and if it is an external redirect
-          const applyBtnStatus = await workerPage.evaluate(() => {
-            let btn = document.querySelector('[data-automation="apply-now"]') as HTMLElement;
-            if (!btn) {
-              const elements = Array.from(document.querySelectorAll('a, button'));
-              btn = elements.find(el => /Apply|Lamar/i.test(el.textContent || '')) as HTMLElement;
-            }
-            if (!btn) return { exists: false, text: '', isExternal: false };
-
-            const buttonText = (btn.textContent || 'Apply').trim();
-
-            // Check for external link SVG icon inside the button
-            const svgs = btn.querySelectorAll('svg');
-            let isExternal = false;
-            for (const svg of Array.from(svgs)) {
-              const paths = svg.querySelectorAll('path');
-              const hasExternalArrowPath = Array.from(paths).some(p => {
-                const d = p.getAttribute('d') || '';
-                return d.includes('M19 11') || d.includes('M21 3');
-              });
-              if (hasExternalArrowPath) {
-                isExternal = true;
-                break;
-              }
-            }
-
-            return { exists: true, text: buttonText, isExternal };
-          });
-
-          if (!applyBtnStatus.exists) {
-            onLog(`[Worker ${workerId + 1}] ❌ Apply button NOT found on page for: ${url}`);
-            errorCount++;
-            continue;
-          }
-
           if (applyBtnStatus.isExternal) {
-            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: External redirect apply button found ("${applyBtnStatus.text}"). Skipping.`);
+            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Mengarahkan ke situs eksternal ("${applyBtnStatus.text}"). Dilewati.`);
             alreadyAppliedCount++;
             continue;
           }
+
+          onLog(`[Worker ${workerId + 1}] 🖱️ Mengklik tombol "${applyBtnStatus.text || 'Lamar Cepat'}"...`);
 
           // Setup listener for new tab opening for this worker's tab specifically
           const newPagePromise = new Promise<any>(async (resolve, reject) => {
             const timeout = setTimeout(() => {
               resolve(null);
-            }, 4000);
+            }, 5000);
 
             try {
               const listener = async (target: any) => {
@@ -241,12 +270,28 @@ export async function runJobstreetBot(
 
           // Click apply to open questionnaire
           await workerPage.evaluate(() => {
-            let btn = document.querySelector('[data-automation="apply-now"]') as HTMLElement;
-            if (!btn) {
-              const elements = Array.from(document.querySelectorAll('a, button'));
-              btn = elements.find(el => /Apply|Lamar/i.test(el.textContent || '')) as HTMLElement;
+            const prioritySelectors = [
+              '[data-automation="job-detail-apply"]',
+              '[data-automation="apply-now"]',
+              '[data-automation="job-detail-apply-button"]',
+              '[data-testid="apply-button"]',
+              'a[href*="/apply"]'
+            ];
+            let btn: HTMLElement | null = null;
+            for (const sel of prioritySelectors) {
+              btn = document.querySelector(sel) as HTMLElement;
+              if (btn) break;
             }
-            if (btn) btn.click();
+
+            if (!btn) {
+              const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]')) as HTMLElement[];
+              btn = candidates.find(el => /Lamar Cepat|Quick Apply|Lamar Sekarang|Apply Now/i.test((el.textContent || '').trim())) || null;
+            }
+
+            if (btn) {
+              btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              btn.click();
+            }
           });
 
           // Determine which page contains the apply form (new tab or same tab)
@@ -255,11 +300,12 @@ export async function runJobstreetBot(
             const newTab = await newPagePromise;
             if (newTab) {
               applyPage = newTab;
-              onLog(`[Worker ${workerId + 1}] 🟢 Application form opened in a new tab.`);
+              onLog(`[Worker ${workerId + 1}] 🟢 Formulir lamaran terbuka di tab baru.`);
+              await applyPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
             } else {
-              await sleep(2000);
+              await sleep(2500);
               if (workerPage.url().includes('/apply')) {
-                onLog(`[Worker ${workerId + 1}] 🟢 Application form opened on the same tab.`);
+                onLog(`[Worker ${workerId + 1}] 🟢 Formulir lamaran terbuka di tab yang sama.`);
               }
             }
           } catch (e) {}

@@ -20,12 +20,6 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
 
   let browser: any = null;
   try {
-    const puppeteer = require('puppeteer-extra');
-    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-    try {
-      puppeteer.use(StealthPlugin());
-    } catch (e) {}
-
     const config = getConfig();
 
     // Verify GEMINI_API_KEY is set in environment or .env
@@ -33,12 +27,9 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       throw new Error('GEMINI_API_KEY is missing in your .env file. Please configure it and restart the server.');
     }
 
-    if (!config.searchKeywords) {
+    if (!config.searchKeywords && !config.indeedNoJobTitleFilter) {
       throw new Error('Search keywords are not configured. Please fill them in first.');
     }
-
-    const profilePath = path.join(process.cwd(), 'automation-profile');
-    onLog('📂 Loading browser profile...');
 
     // Test Google Sheets connection
     onLog('📊 Menguji koneksi ke Google Sheets...');
@@ -50,20 +41,11 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
       onLog(`⚠️ Peringatan: Gagal terhubung ke Google Sheets (${sheetsTest.error})`);
       onLog(`   ℹ️ Lamaran tetap akan diproses, namun riwayat sheets tidak tersimpan jika koneksi terputus.`);
     }
-    
-    const isHeadless = mode !== 'headful';
-    browser = await puppeteer.launch({
-      headless: isHeadless,
-      userDataDir: profilePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--window-size=1280,800'
-      ],
-      defaultViewport: isHeadless ? { width: 1280, height: 800 } : null
-    });
+
+    // Launch browser with Google Chrome priority and Chromium fallback
+    const { launchBrowserWithFallback } = require('./browserHelper');
+    const launchResult = await launchBrowserWithFallback(mode as any, onLog);
+    browser = launchResult.browser;
 
     let totalSuccess = 0;
     let totalAlreadyApplied = 0;
