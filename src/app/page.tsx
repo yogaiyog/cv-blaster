@@ -1220,19 +1220,9 @@ export default function Home() {
               </div>
 
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Google Credentials JSON (Service Account)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(2); }}
-                    className="text-xs text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
-                  >
-                    <span>Cara dapat file JSON ini?</span>
-                    <span>→</span>
-                  </button>
-                </div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Google Credentials JSON (Service Account)
+                </label>
                 <textarea
                   rows={6}
                   required
