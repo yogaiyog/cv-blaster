@@ -97,6 +97,127 @@ const EMPTY_CONFIG: AppConfig = {
   domicile: '',
 };
 
+interface RoleTemplate {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  badgeColor: string;
+  searchKeywords: string;
+  skills: string;
+  educationLevel: string;
+  yearsOfExperience: number;
+  expectedSalary: number;
+  highlightSkills: string[];
+}
+
+const ROLE_TEMPLATES: RoleTemplate[] = [
+  {
+    id: 'fullstack',
+    name: 'Fullstack Developer',
+    category: 'Software Engineering & IT',
+    icon: '💻',
+    badgeColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    searchKeywords: 'Fullstack Developer, Frontend Developer, Backend Developer, Software Engineer, Web Developer, React Developer, Node.js Developer',
+    skills: "JavaScript, TypeScript, Python, Java, C#, C++, PHP, Go, HTML, CSS, React, React.js, Next.js, Angular, Angular.js, Vue.js, Tailwind CSS, Bootstrap, jQuery, Framer Motion, Three.js, Node.js, Express.js, NestJS, Fiber, Laravel, Django, FastAPI, Spring Boot, REST API, RESTful API, GraphQL, Redis, RabbitMQ, Kafka, Celery, Asynq, Message Queue, PostgreSQL, MySQL, Supabase, Prisma, MongoDB, SQL, Docker, Nginx, PM2, Git, GitHub, GitHub Actions, CI/CD, Postman, VS Code, Full Stack Development, Backend Development, Frontend Development, Web Development, API Development, Database Design, Microservices, Object-Oriented Programming, Asynchronous Programming, Agile, Scrum, Problem Solving, Debugging",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 10000000,
+    highlightSkills: ['React & Next.js', 'Node.js & Go', 'PostgreSQL & SQL', 'Docker & CI/CD']
+  },
+  {
+    id: 'finance',
+    name: 'Finance & Accounting',
+    category: 'Keuangan, Akuntansi & Pajak',
+    icon: '📊',
+    badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    searchKeywords: 'Finance, Accounting, Staf Keuangan, Finance Officer, Accounting Staff, Staf Pajak, Tax Specialist, Auditor, Financial Analyst, Treasury',
+    skills: "Microsoft Excel, Advanced Excel, VLOOKUP, HLOOKUP, XLOOKUP, Pivot Table, INDEX MATCH, Financial Reporting, Laporan Keuangan, Laporan Laba Rugi, Neraca, Bookkeeping, Jurnal Umum, Jurnal Penyesuaian, Akuntansi, General Ledger, Buku Besar, Tax, Pajak, PPh 21, PPh 23, PPh 4 ayat 2, PPh 25, PPN, e-Faktur, e-SPT, DJP Online, Brevet A & B, Accurate, Accurate Online, Zahir Accounting, SAP, SAP ERP, MYOB, Jurnal by Mekari, Cash Flow Management, Manajemen Arus Kas, Budgeting, Anggaran, Financial Planning, Invoicing, Faktur, Petty Cash, Kas Kecil, Bank Reconciliation, Rekonsiliasi Bank, Audit Keuangan, Internal Audit, Cost Accounting, Akuntansi Biaya, Financial Modeling, Analytical Thinking, Problem Solving, Kepatuhan Pajak",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 7500000,
+    highlightSkills: ['Excel (Pivot & VLOOKUP)', 'Pajak (PPh, PPN, e-Faktur)', 'Laporan Keuangan', 'Accurate & SAP']
+  },
+  {
+    id: 'digital_marketing',
+    name: 'Digital Marketing',
+    category: 'Pemasaran, Ads & Social Media',
+    icon: '📱',
+    badgeColor: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+    searchKeywords: 'Digital Marketing, Performance Marketing, Social Media Specialist, SEO Specialist, Content Creator, Copywriter, SEM Specialist, Brand Marketing, Marketing Communication',
+    skills: "Meta Ads, Facebook Ads, Instagram Ads, Google Ads, Google Search Ads, TikTok Ads, TikTok Shop, TikTok Affiliate, SEO, Search Engine Optimization, On-Page SEO, Off-Page SEO, Keyword Research, SEM, Google Analytics, GA4, Google Tag Manager, Google Search Console, Copywriting, Content Marketing, Content Writing, Content Strategy, Social Media Marketing, Social Media Management, Instagram Marketing, LinkedIn Marketing, Email Marketing, Mailchimp, CRM, Canva, CapCut, Adobe Photoshop, Adobe Premiere, Video Editing, Influencer Marketing, KOL Management, Market Research, Branding, A/B Testing, Conversion Rate Optimization (CRO), ROI & ROAS Optimization, Creative Campaign Strategy",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 8000000,
+    highlightSkills: ['Meta & Google Ads', 'SEO & Google Analytics', 'Copywriting & Content', 'TikTok & Social Media']
+  },
+  {
+    id: 'guru',
+    name: 'Guru & Tenaga Pengajar',
+    category: 'Pendidikan, Bimbel & Pelatihan',
+    icon: '🎓',
+    badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    searchKeywords: 'Guru, Pengajar, Teacher, Tutor, Instruktur, Dosen, Tenaga Pendidik, Academic Coordinator, Education Specialist, Guru Bimbel',
+    skills: "Kurikulum Merdeka, Kurikulum 2013 (K13), Rencana Pelaksanaan Pembelajaran (RPP), Modul Ajar, Silabus, Manajemen Kelas, Classroom Management, Metode Pembelajaran Interaktif, Active Learning, Pembuatan Soal, Asesmen Pembelajaran, Penilaian Siswa, Asesmen Diagnostik & Formatif, Microsoft PowerPoint, Canva for Education, Google Classroom, Google Workspace for Education, Zoom, Media Pembelajaran Digital, Bimbingan Konseling, Public Speaking, Komunikasi Efektif, Edukasi Anak, Pedagogik, Lesson Planning, Mentoring, Pembelajaran Daring & Luring, Evaluasi Pembelajaran, Student Engagement, Karakter Siswa",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 6000000,
+    highlightSkills: ['Kurikulum Merdeka & RPP', 'Manajemen Kelas & Asesmen', 'Canva & Google Classroom', 'Pedagogik & Public Speaking']
+  },
+  {
+    id: 'data_analyst',
+    name: 'Data Analis',
+    category: 'Data & Business Intelligence',
+    icon: '📈',
+    badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    searchKeywords: 'Data Analyst, Business Intelligence, BI Analyst, Data Scientist, Data Specialist, Junior Data Analyst, Analytics Specialist, Reporting Analyst',
+    skills: "SQL, PostgreSQL, MySQL, Microsoft SQL Server, BigQuery, Snowflake, Python, Pandas, NumPy, Data Visualization, Visualisasi Data, Tableau, Power BI, Google Looker Studio, Metabase, Microsoft Excel, Advanced Excel, Pivot Tables, Power Query, Statistics, Statistika, Data Cleaning, Pembersihan Data, ETL, Data Wrangling, Business Intelligence, Dashboard Design, Business Reporting, A/B Testing, Exploratory Data Analysis (EDA), Data Modeling, Statistical Modeling, Analytical Thinking, Problem Solving, Storytelling with Data, KPI Tracking",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 9000000,
+    highlightSkills: ['SQL & Relational DB', 'Tableau & Power BI', 'Python & Pandas', 'Excel & Business Intelligence']
+  },
+  {
+    id: 'qa',
+    name: 'QA (Quality Assurance)',
+    category: 'Software Testing & Automation',
+    icon: '🧪',
+    badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    searchKeywords: 'QA Engineer, Quality Assurance, Software Tester, QA Tester, Manual Tester, Automation QA, Test Engineer, Software Quality Assurance',
+    skills: "Manual Testing, Automation Testing, Pengujian Perangkat Lunak, Test Case Design, Desain Test Case, Test Scenarios, Test Plan, Bug Tracking, Pelaporan Bug, Jira, Trello, ClickUp, Postman, API Testing, REST API, Cypress, Selenium, Playwright, Appium, Mobile Testing, JMeter, Performance Testing, Regression Testing, Smoke Testing, Sanity Testing, Black Box Testing, White Box Testing, User Acceptance Testing (UAT), Git, CI/CD, TestRail, Zephyr, Agile, Scrum, SQL, Basic JavaScript/TypeScript, Problem Solving, Analytical Mindset",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 8500000,
+    highlightSkills: ['Manual & Automation Testing', 'API Testing (Postman)', 'Cypress / Selenium / Playwright', 'Test Case Design & Jira']
+  },
+  {
+    id: 'devops',
+    name: 'DevOps & Cloud Engineer',
+    category: 'Cloud, Infrastructure & CI/CD',
+    icon: '⚡',
+    badgeColor: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+    searchKeywords: 'DevOps Engineer, Cloud Engineer, Site Reliability Engineer, SRE, System Administrator, Infrastructure Engineer, Platform Engineer',
+    skills: "Linux, Ubuntu, Debian, CentOS, Bash Scripting, Shell Scripting, Docker, Docker Compose, Containerization, Kubernetes, K8s, Helm, CI/CD, CI/CD Pipelines, GitHub Actions, GitLab CI, Jenkins, AWS, Amazon Web Services, EC2, S3, RDS, Lambda, GCP, Google Cloud Platform, Microsoft Azure, Terraform, Infrastructure as Code (IaC), Ansible, Nginx, Reverse Proxy, Apache, Prometheus, Grafana, ELK Stack, Elasticsearch, Logstash, Kibana, Datadog, SSL/TLS, Let's Encrypt, Cloudflare, Git, Networking, DNS, TCP/IP, Security Best Practices, Microservices Architecture, Disaster Recovery",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 2,
+    expectedSalary: 12000000,
+    highlightSkills: ['Docker & Kubernetes', 'CI/CD (GitHub Actions)', 'AWS & Cloud Platform', 'Linux & Terraform']
+  },
+  {
+    id: 'project_manager',
+    name: 'Project Manager',
+    category: 'Manajemen Proyek, Agile & Scrum',
+    icon: '📋',
+    badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    searchKeywords: 'Project Manager, PM, IT Project Manager, Scrum Master, Product Manager, Product Owner, Project Coordinator, Agile Project Manager',
+    skills: "Project Management, Manajemen Proyek, Agile, Scrum, Kanban, Sprint Planning, Sprint Review, Daily Standup, Backlog Grooming, Sprint Retrospective, Jira, Jira Software, Confluence, Trello, ClickUp, Asana, Notion, Microsoft Project, Scope Management, Risk Management, Stakeholder Management, Budgeting, Anggaran Proyek, Resource Allocation, Timeline Management, Gantt Chart, Product Roadmap, User Stories, Acceptance Criteria, SDLC, Cross-functional Team Leadership, Problem Solving, Communication, Negotiation, Presentation, OKRs, KPIs, Vendor Management",
+    educationLevel: 'Sarjana (S1)',
+    yearsOfExperience: 3,
+    expectedSalary: 11000000,
+    highlightSkills: ['Agile & Scrum (Jira/Trello)', 'Sprint Planning & Roadmap', 'Stakeholder & Risk Management', 'Cross-functional Leadership']
+  }
+];
+
 export default function Home() {
   // Config state
   const [config, setConfig] = useState<AppConfig>(EMPTY_CONFIG);
@@ -132,6 +253,34 @@ export default function Home() {
   const [importJsonText, setImportJsonText] = useState('');
   const [importMode, setImportMode] = useState<'text' | 'file'>('text');
   const [importError, setImportError] = useState<string | null>(null);
+
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateApplyOptions, setTemplateApplyOptions] = useState({
+    skills: true,
+    keywords: true,
+    profile: false,
+  });
+
+  const handleApplyTemplate = (role: RoleTemplate) => {
+    const updated = { ...config };
+    if (templateApplyOptions.skills) {
+      updated.skills = role.skills;
+    }
+    if (templateApplyOptions.keywords) {
+      updated.searchKeywords = role.searchKeywords;
+    }
+    if (templateApplyOptions.profile) {
+      updated.educationLevel = role.educationLevel;
+      updated.yearsOfExperience = role.yearsOfExperience;
+      updated.expectedSalary = role.expectedSalary;
+    }
+    setConfig(updated);
+    setIsTemplateModalOpen(false);
+    setSaveStatus({
+      type: 'success',
+      message: `✅ Template "${role.name}" berhasil diterapkan! Jangan lupa klik Simpan Konfigurasi / Profil.`
+    });
+  };
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const logTerminalRef = useRef<HTMLDivElement>(null);
@@ -940,6 +1089,14 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsTemplateModalOpen(true)}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-blue-950/80 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 transition flex items-center gap-1.5 shadow-sm"
+                    title="Pilih template profesi (Fullstack, Finance, Digital Marketing, Guru, Data Analis, QA, DevOps, Project Manager)"
+                  >
+                    📋 Template Profesi
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleExportConfig}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
                     title="Unduh backup konfigurasi & profil ke file JSON"
@@ -1242,13 +1399,11 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setConfig({
-                      ...config,
-                      skills: "JavaScript, TypeScript, Python, Java, C#, C++, PHP, Go, HTML, CSS, React, React.js, Next.js, Angular, Angular.js, Tailwind CSS, Bootstrap, jQuery, Framer Motion, Three.js, React Three Fiber, Drei, Node.js, Express.js, Fiber, GORM, REST API, RESTful API, Redis, RabbitMQ, Celery, Asynq, Message Queue, Kafka, PostgreSQL, MySQL, Supabase, Prisma, SQL, Docker, Nginx, PM2, Git, GitHub, GitHub Actions, Cloudflare, Let's Encrypt, Certbot, CI/CD, Postman, VS Code, Full Stack Development, Backend Development, Frontend Development, Web Development, API Development, Database Design, Microservices, Object-Oriented Programming, Asynchronous Programming, Blender, TouchDesigner, MediaPipe, Figma, ClickUp, Jira, Trello, Slack, Notion, Agile, Scrum, Problem Solving, Debugging"
-                    })}
-                    className="text-xs text-blue-400 hover:text-blue-300 underline font-medium"
+                    onClick={() => setIsTemplateModalOpen(true)}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-blue-950/80 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 transition flex items-center gap-1.5 shadow-sm"
+                    title="Pilih template profesi (Fullstack, Finance, Digital Marketing, Guru, Data Analis, QA, DevOps, Project Manager)"
                   >
-                    Reset ke Template Lengkap
+                    <span>📋</span> Pilih Template Profesi
                   </button>
                 </div>
                 <textarea
@@ -1870,6 +2025,133 @@ export default function Home() {
                     ✅ Terapkan Konfigurasi
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: PILIH TEMPLATE PROFESI */}
+        {isTemplateModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span>📋</span> Pilih Template Profesi &amp; Keahlian
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Pilih bidang pekerjaan Anda untuk mengisi daftar skill checklist kuesioner dan kata kunci pencarian otomatis.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTemplateModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1.5 rounded-md hover:bg-slate-800 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Options Bar */}
+              <div className="px-6 py-3 bg-slate-900/80 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <span className="text-slate-300 font-semibold">Opsi Penerapan Template:</span>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={templateApplyOptions.skills}
+                      onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, skills: e.target.checked })}
+                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                    />
+                    <span>Daftar Skill Checklist</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={templateApplyOptions.keywords}
+                      onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, keywords: e.target.checked })}
+                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                    />
+                    <span>Kata Kunci Pencarian (Keywords)</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={templateApplyOptions.profile}
+                      onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, profile: e.target.checked })}
+                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                    />
+                    <span>Contoh Ekspektasi Gaji &amp; Pengalaman</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Grid of 8 Role Cards */}
+              <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+                {ROLE_TEMPLATES.map((role) => (
+                  <div
+                    key={role.id}
+                    className="p-4 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-blue-500/50 rounded-xl transition flex flex-col justify-between group shadow-sm"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">{role.icon}</span>
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-100 group-hover:text-blue-400 transition">
+                              {role.name}
+                            </h4>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium inline-block mt-0.5 ${role.badgeColor}`}>
+                              {role.category}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Highlight Skills Badges */}
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {role.highlightSkills.map((badge, idx) => (
+                          <span key={idx} className="text-[11px] bg-slate-950 text-slate-300 border border-slate-800 px-2 py-0.5 rounded-md">
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Keywords Preview */}
+                      <p className="mt-2.5 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                        <strong className="text-slate-300">Keywords:</strong> {role.searchKeywords}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">
+                        {role.skills.split(',').length}+ keahlian &amp; tools
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyTemplate(role)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md hover:shadow-blue-500/20 transition flex items-center gap-1.5"
+                      >
+                        <span>⚡ Terapkan Template</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs">
+                <span className="text-slate-400">
+                  💡 Anda dapat mengedit / menyesuaikan kembali daftar skill &amp; keyword setelah template diterapkan.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsTemplateModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
+                >
+                  Tutup
+                </button>
               </div>
             </div>
           </div>
