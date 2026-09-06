@@ -7,10 +7,13 @@
   "files": [
     "electron/**/*",
     ".next/**/*",
+    "!.next/cache/**/*",
     "public/**/*",
     "package.json",
     "node_modules/**/*",
     "!node_modules/**/*.map",
+    "!node_modules/.cache/**/*",
+    "!automation-profile/**/*",
     "!dist-electron/**/*"
   ],
   "asar": false,
@@ -31,7 +34,7 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64", "ia32"]
+        "arch": ["x64"]
       }
     ]
   },
