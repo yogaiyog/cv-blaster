@@ -95,6 +95,14 @@ async function createWindow() {
     }
   });
 
+  // 1. Immediately load the sleek splash loading screen
+  const splashPath = path.join(__dirname, 'splash.html');
+  if (fs.existsSync(splashPath)) {
+    try {
+      await mainWindow.loadFile(splashPath);
+    } catch {}
+  }
+
   let loadUrl = 'http://localhost:3000';
 
   if (isDev) {

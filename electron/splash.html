@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV Blaster</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: fadeIn 0.4s ease-out;
+    }
+    .logo-wrapper {
+      position: relative;
+      margin-bottom: 24px;
+    }
+    .logo-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0) 70%);
+      border-radius: 50%;
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+    .logo {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      object-fit: cover;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 32px;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
+    .loader-bar-bg {
+      width: 240px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 16px;
+    }
+    .loader-bar-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      border-radius: 9999px;
+      animation: indeterminate 1.6s infinite ease-in-out;
+    }
+    .status-text {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 400;
+      letter-spacing: 0.1px;
+    }
+    @keyframes indeterminate {
+      0% {
+        left: -40%;
+        width: 30%;
+      }
+      50% {
+        left: 30%;
+        width: 60%;
+      }
+      100% {
+        left: 100%;
+        width: 40%;
+      }
+    }
+    @keyframes pulseGlow {
+      0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.5;
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 0.9;
+      }
+    }
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-wrapper">
+      <div class="logo-glow"></div>
+      <img class="logo" src="assets/icon.png" alt="CV Blaster Logo" onerror="this.style.display='none'">
+    </div>
+    <h1 class="title">CV BLASTER</h1>
+    <p class="subtitle">Auto Apply Bot for Jobseekers</p>
+    
+    <div class="loader-bar-bg">
+      <div class="loader-bar-fill"></div>
+    </div>
+    
+    <div class="status-text" id="statusText">Menyiapkan server lokal & konfigurasi...</div>
+  </div>
+</body>
+</html>
