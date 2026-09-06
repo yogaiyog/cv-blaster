@@ -1,5 +1,4 @@
 import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
-import { appendQuestionToCsv } from '../csvHelper';
 import { answerQuestion } from '../questionAnswer';
 
 export interface BotMetrics {
@@ -443,7 +442,6 @@ export async function runJobstreetBot(
                 // Query Gemini / Regex answers
                 const answers = await answerQuestion(item.question, item.options, item.type);
                 onLog(`[Worker ${workerId + 1}] 🤖 AI Decision for "${item.question}": [${answers.join(' | ')}]`);
-                appendQuestionToCsv(item.question, item.type, item.options, answers);
 
                 // Apply chosen answers to the active applyPage DOM
                 await applyPage.evaluate((qItem: any, chosenAnswers: string[]) => {

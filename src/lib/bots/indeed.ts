@@ -1,5 +1,4 @@
 import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
-import { appendQuestionToCsv } from '../csvHelper';
 import { answerQuestion } from '../questionAnswer';
 import { generateCoverLetter } from '../coverLetterHelper';
 
@@ -620,7 +619,6 @@ export async function runIndeedBot(
                 for (const qItem of unfilledQuestions) {
                   const chosenAnswers = await answerQuestion(qItem.question, qItem.options, qItem.type as any);
                   onLog(`🤖 [Indeed] Q: "${qItem.question}" -> Ans: [${chosenAnswers.join(' | ')}]`);
-                  appendQuestionToCsv(qItem.question, qItem.type as any, qItem.options, chosenAnswers);
 
                   // Tulis ke DOM
                   await activeFrame.evaluate(async (targetQ: any, answers: string[]) => {

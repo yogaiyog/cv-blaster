@@ -1,5 +1,4 @@
 import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
-import { appendQuestionToCsv } from '../csvHelper';
 import { answerQuestion } from '../questionAnswer';
 
 export interface BotMetrics {
@@ -536,10 +535,9 @@ export async function runLinkedinBot(
               continue;
             }
 
-            // Selesaikan via Q&A Engine (KB CSV -> Regex Deterministic -> Gemini LLM)
+            // Selesaikan via Q&A Engine (KB Google Sheets -> Regex Deterministic -> Gemini LLM)
             const chosenAnswers = await answerQuestion(qItem.question, qItem.options, qItem.type as any);
             onLog(`🤖 Pertanyaan: "${qItem.question}" -> Jawaban: [${chosenAnswers.join(' | ')}]`);
-            appendQuestionToCsv(qItem.question, qItem.type as any, qItem.options, chosenAnswers);
 
             // Injeksi hasil jawaban ke DOM modal LinkedIn
             await page.evaluate((targetQ: any, answers: string[]) => {

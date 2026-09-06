@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cleanAndFilterCsv } from '@/lib/csvHelper';
 import { cleanQuestionsInSheet } from '@/lib/googleSheets';
 import { getConfig } from '@/lib/config';
 
@@ -13,8 +12,10 @@ export async function POST(req: Request) {
       return NextResponse.json(result);
     }
 
-    const result = cleanAndFilterCsv();
-    return NextResponse.json(result);
+    return NextResponse.json({
+      success: false,
+      message: 'Google Sheets belum terhubung. Konfigurasi Spreadsheet ID dan Credentials terlebih dahulu.'
+    }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
