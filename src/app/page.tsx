@@ -356,6 +356,44 @@ export default function Home() {
     }
   };
 
+  const handleResetConfig = async () => {
+    if (!confirm('Apakah Anda yakin ingin mengosongkan semua data konfigurasi dan profil (Reset ke awal onboarding)?')) {
+      return;
+    }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      const cleanConfig = {
+        ...DEFAULT_CONFIG,
+        spreadsheetId: '',
+        sheetName: 'Sheet1',
+        questionsSheetName: 'Screening Questions',
+        googleCredentialsJson: '',
+        searchKeywords: '',
+        location: '',
+        fullName: '',
+        skills: '',
+        phoneNumber: '',
+        portfolioUrl: '',
+        githubUrl: '',
+        linkedinUrl: '',
+        domicile: '',
+        expectedSalary: 0,
+        gpa: '',
+        yearsOfExperience: 0,
+      };
+      setConfig(cleanConfig);
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cleanConfig),
+      });
+      alert('✅ Semua data konfigurasi dan profil berhasil dikosongkan!');
+      fetchQuestions(cleanConfig);
+      fetchAppliedHistory(cleanConfig);
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    }
+  };
 
   const handleToggleSetupBrowser = async () => {
     try {
@@ -974,6 +1012,14 @@ export default function Home() {
                     <span>💾 Simpan Konfigurasi</span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleResetConfig}
+                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5"
+                  title="Kosongkan semua form dan kembalikan ke kondisi onboarding baru"
+                >
+                  🔄 Reset ke Awal (Kosongkan Form)
+                </button>
               </div>
             </form>
           )}
@@ -1197,27 +1243,37 @@ export default function Home() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={isSavingConfig}
-                className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
-                  isSavingConfig
-                    ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
-                }`}
-              >
-                {isSavingConfig ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Menyimpan Profil Pelamar...</span>
-                  </>
-                ) : (
-                  <span>💾 Simpan Profil Pelamar</span>
-                )}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="submit"
+                  disabled={isSavingConfig}
+                  className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                    isSavingConfig
+                      ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                  }`}
+                >
+                  {isSavingConfig ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>Menyimpan Profil Pelamar...</span>
+                    </>
+                  ) : (
+                    <span>💾 Simpan Profil Pelamar</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetConfig}
+                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5"
+                  title="Kosongkan semua form dan kembalikan ke kondisi onboarding baru"
+                >
+                  🔄 Reset ke Awal (Kosongkan Form)
+                </button>
+              </div>
             </form>
           )}
 

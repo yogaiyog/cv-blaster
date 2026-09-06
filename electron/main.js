@@ -70,13 +70,15 @@ async function createWindow() {
     },
   });
 
-  // Open external links in default OS browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url);
-      return { action: 'deny' };
+  // Open DevTools with F12 or Cmd+Option+I (macOS) / Ctrl+Shift+I (Windows)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (
+      input.key === 'F12' ||
+      (input.meta && input.alt && input.key.toLowerCase() === 'i') ||
+      (input.control && input.shift && input.key.toLowerCase() === 'i')
+    ) {
+      mainWindow.webContents.toggleDevTools();
     }
-    return { action: 'allow' };
   });
 
   let loadUrl = 'http://localhost:3000';
