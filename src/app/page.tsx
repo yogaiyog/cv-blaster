@@ -132,6 +132,7 @@ export default function Home() {
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const logTerminalRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load config from server & localStorage on initial mount
   useEffect(() => {
@@ -355,6 +356,41 @@ export default function Home() {
       setSaveStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan' });
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  const handleExportConfig = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(config, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `cv-blaster-config-${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    if (e.target.files && e.target.files[0]) {
+      fileReader.readAsText(e.target.files[0], 'UTF-8');
+      fileReader.onload = async (event) => {
+        try {
+          const parsed = JSON.parse(event.target?.result as string);
+          const merged = { ...config, ...parsed };
+          setConfig(merged);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(merged),
+          });
+          alert('✅ Konfigurasi berhasil diimpor!');
+          fetchAppliedHistory(merged);
+          fetchQuestions(merged);
+        } catch {
+          alert('❌ Format file JSON konfigurasi tidak valid.');
+        }
+      };
     }
   };
 
@@ -897,13 +933,40 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="border-b border-slate-800 pb-2 pt-4">
-                <h2 className="text-lg font-semibold text-slate-200">
-                  Integrasi Google Sheets API (Cloud Database)
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Digunakan untuk menyimpan log riwayat lamaran dan knowledge base pertanyaan kuisioner (tanpa butuh DB).
-                </p>
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2 pt-4 flex-wrap gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-200">
+                    Integrasi Google Sheets API (Cloud Database)
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Digunakan untuk menyimpan log riwayat lamaran dan knowledge base pertanyaan kuisioner (tanpa butuh DB).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportConfig}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
+                    title="Unduh backup konfigurasi & profil ke file JSON"
+                  >
+                    📤 Export JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
+                    title="Impor konfigurasi dari file JSON"
+                  >
+                    📥 Import JSON
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImportConfig}
+                    accept=".json"
+                    className="hidden"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
