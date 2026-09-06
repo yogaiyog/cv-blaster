@@ -64,7 +64,7 @@ const STORAGE_KEY = 'cv_blaster_config_v1';
 const EMPTY_CONFIG: AppConfig = {
   spreadsheetId: '',
   sheetName: 'Sheet1',
-  questionsSheetName: 'Screening Questions',
+  questionsSheetName: 'Sheet2',
   googleCredentialsJson: '',
   geminiApiKey: '',
   searchKeywords: '',
@@ -1196,8 +1196,8 @@ export default function Home() {
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: Screening Questions"
-                    value={config.questionsSheetName || 'Screening Questions'}
+                    placeholder="Contoh: Sheet2"
+                    value={config.questionsSheetName || 'Sheet2'}
                     onChange={(e) => setConfig({ ...config, questionsSheetName: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
                   />
@@ -1527,7 +1527,7 @@ export default function Home() {
                     </h2>
                     {questionsSource === 'google_sheets' ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets Active ({config.questionsSheetName || 'Screening Questions'})
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets Active ({config.questionsSheetName || 'Sheet2'})
                       </span>
                     ) : (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
@@ -2446,7 +2446,7 @@ export default function Home() {
                             <span>❓</span> Tab 2: Database Pertanyaan
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                            Default: Screening Questions
+                            Default: Sheet2
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400">

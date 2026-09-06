@@ -46,7 +46,7 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 export const DEFAULT_CONFIG: AppConfig = {
   spreadsheetId: '',
   sheetName: 'Sheet1',
-  questionsSheetName: 'Screening Questions',
+  questionsSheetName: 'Sheet2',
   googleCredentialsJson: '',
   geminiApiKey: '',
   searchKeywords: '',

@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `Berhasil memigrasikan ${seeded.length} pertanyaan ke Google Sheets tab "Screening Questions"!`,
+        message: `Berhasil memigrasikan ${seeded.length} pertanyaan ke Google Sheets tab "${config.questionsSheetName || 'Sheet2'}"!`,
         questions: seeded
       });
     }

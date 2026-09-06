@@ -432,7 +432,7 @@ export function invalidateQuestionsCache() {
 
 export function getQuestionsSheetTabName(cfg?: AppConfig): string {
   const config = cfg || getConfig();
-  return config.questionsSheetName || 'Screening Questions';
+  return config.questionsSheetName || 'Sheet2';
 }
 
 /**
