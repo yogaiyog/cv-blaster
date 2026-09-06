@@ -43,3 +43,9 @@ next-env.d.ts
 # local bot configurations & automation profile
 /automation-profile/
 config.json
+
+# electron build outputs
+/dist-electron/
+*.dmg
+*.exe
+*.zip
