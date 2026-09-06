@@ -130,6 +130,11 @@ export default function Home() {
   });
   const [csvSaveStatus, setCsvSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importJsonText, setImportJsonText] = useState('');
+  const [importMode, setImportMode] = useState<'text' | 'file'>('text');
+  const [importError, setImportError] = useState<string | null>(null);
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const logTerminalRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,26 +374,39 @@ export default function Home() {
     downloadAnchor.remove();
   };
 
-  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const applyConfigJson = async (rawJson: string) => {
+    setImportError(null);
+    try {
+      const parsed = JSON.parse(rawJson);
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('JSON harus berupa objek konfigurasi yang valid.');
+      }
+      const merged = { ...config, ...parsed };
+      setConfig(merged);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(merged),
+      });
+      setIsImportModalOpen(false);
+      setImportJsonText('');
+      alert('✅ Konfigurasi berhasil diimpor!');
+      fetchAppliedHistory(merged);
+      fetchQuestions(merged);
+    } catch (err: any) {
+      setImportError(err.message || 'Format JSON tidak valid.');
+    }
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
       fileReader.readAsText(e.target.files[0], 'UTF-8');
-      fileReader.onload = async (event) => {
-        try {
-          const parsed = JSON.parse(event.target?.result as string);
-          const merged = { ...config, ...parsed };
-          setConfig(merged);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-          await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(merged),
-          });
-          alert('✅ Konfigurasi berhasil diimpor!');
-          fetchAppliedHistory(merged);
-          fetchQuestions(merged);
-        } catch {
-          alert('❌ Format file JSON konfigurasi tidak valid.');
+      fileReader.onload = (event) => {
+        const content = event.target?.result as string;
+        if (content) {
+          applyConfigJson(content);
         }
       };
     }
@@ -953,19 +971,12 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => { setIsImportModalOpen(true); setImportError(null); }}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
-                    title="Impor konfigurasi dari file JSON"
+                    title="Impor konfigurasi dari teks atau file JSON"
                   >
                     📥 Import JSON
                   </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImportConfig}
-                    accept=".json"
-                    className="hidden"
-                  />
                 </div>
               </div>
 
@@ -1839,6 +1850,104 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* MODAL: IMPORT CONFIG (FILE OR TEXT) */}
+        {isImportModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+                    📥 Impor Konfigurasi (JSON)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Pilih untuk copy-paste teks JSON langsung atau upload file .json
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setIsImportModalOpen(false); setImportError(null); }}
+                  className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex rounded-lg bg-slate-900 p-1 border border-slate-800 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => { setImportMode('text'); setImportError(null); }}
+                  className={`flex-1 py-1.5 rounded-md transition ${importMode === 'text' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  📋 Copy-Paste Teks JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setImportMode('file'); setImportError(null); }}
+                  className={`flex-1 py-1.5 rounded-md transition ${importMode === 'file' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  📁 Upload File .JSON
+                </button>
+              </div>
+
+              {importError && (
+                <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-lg text-rose-300 text-xs">
+                  ⚠️ {importError}
+                </div>
+              )}
+
+              {importMode === 'text' ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Paste teks JSON konfigurasi Anda di sini:
+                  </label>
+                  <textarea
+                    rows={8}
+                    value={importJsonText}
+                    onChange={(e) => setImportJsonText(e.target.value)}
+                    placeholder={'{\n  "spreadsheetId": "196J8Q5Vqey-NDXFF...",\n  "fullName": "Yoga Adi",\n  "expectedSalary": 8000000\n}'}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="py-8 border-2 border-dashed border-slate-800 hover:border-blue-500/60 rounded-xl text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/70"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="text-3xl mb-2">📁</div>
+                  <p className="text-sm font-semibold text-slate-200">Klik untuk memilih file konfigurasi .json</p>
+                  <p className="text-xs text-slate-400 mt-1">Pilih file JSON hasil export sebelumnya</p>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImportFile}
+                    accept=".json"
+                    className="hidden"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setIsImportModalOpen(false); setImportError(null); }}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                >
+                  Batal
+                </button>
+                {importMode === 'text' && (
+                  <button
+                    type="button"
+                    onClick={() => applyConfigJson(importJsonText)}
+                    disabled={!importJsonText.trim()}
+                    className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold shadow-md transition"
+                  >
+                    ✅ Terapkan Konfigurasi
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Peringatan Google Sheets Tidak Terkoneksi */}
         {sheetsWarning?.open && (
