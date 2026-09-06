@@ -5,6 +5,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const mode = request.nextUrl.searchParams.get('mode') || 'headless';
+  let configOverride = undefined;
+  const configParam = request.nextUrl.searchParams.get('config');
+  if (configParam) {
+    try {
+      configOverride = JSON.parse(configParam);
+    } catch {}
+  }
+
   const responseStream = new TransformStream();
   const writer = responseStream.writable.getWriter();
   const encoder = new TextEncoder();
@@ -24,7 +32,7 @@ export async function GET(request: NextRequest) {
     try {
       await startBot(async (msg) => {
         await sendLog(msg);
-      }, mode);
+      }, mode, configOverride);
     } catch (err: any) {
       await sendLog(`🚨 Fatal error: ${err.message || err}`);
     } finally {

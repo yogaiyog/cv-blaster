@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 interface AppConfig {
   spreadsheetId: string;
   sheetName: string;
+  questionsSheetName?: string;
   googleCredentialsJson: string;
   searchKeywords: string;
   location: string;
@@ -54,13 +55,17 @@ interface QuestionItem {
   type: string;
   options: string;
   answer: string;
+  updatedAt?: string;
 }
+
+const STORAGE_KEY = 'cv_blaster_config_v1';
 
 export default function Home() {
   // Config state
   const [config, setConfig] = useState<AppConfig>({
     spreadsheetId: '',
     sheetName: 'Sheet1',
+    questionsSheetName: 'Screening Questions',
     googleCredentialsJson: '',
     searchKeywords: '',
     location: '',
@@ -101,9 +106,15 @@ export default function Home() {
   const [isSetupBrowserRunning, setIsSetupBrowserRunning] = useState(false);
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [sheetsWarning, setSheetsWarning] = useState<{
+    open: boolean;
+    error: string;
+    mode: 'headless' | 'headful';
+  } | null>(null);
 
-  // Question CSV state
+  // Question CSV & Sheets state
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [questionsSource, setQuestionsSource] = useState<'google_sheets' | 'local_csv'>('local_csv');
   const [rawCsvText, setRawCsvText] = useState('');
   const [csvViewMode, setCsvViewMode] = useState<'table' | 'raw'>('table');
   const [questionSearch, setQuestionSearch] = useState('');
@@ -119,18 +130,37 @@ export default function Home() {
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const logTerminalRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load config & history on mount
+  // Load config from localStorage on initial mount
   useEffect(() => {
-    fetchConfig();
-    fetchAppliedHistory();
-    fetchQuestions();
-    checkSetupBrowserStatus();
+    try {
+      const savedLocal = localStorage.getItem(STORAGE_KEY);
+      let initialConfig = config;
+      if (savedLocal) {
+        const parsed = JSON.parse(savedLocal);
+        initialConfig = { ...config, ...parsed };
+        setConfig(initialConfig);
+      }
+      fetchQuestions(initialConfig);
+      fetchAppliedHistory(initialConfig);
+    } catch {
+      fetchConfig();
+      fetchQuestions();
+      fetchAppliedHistory();
+    }
 
-    // Check setup browser status every 5 seconds
+    checkSetupBrowserStatus();
     const interval = setInterval(checkSetupBrowserStatus, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Save to localStorage on any config modification
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    } catch {}
+  }, [config]);
 
   // Scroll terminal logs to bottom when new logs arrive
   useEffect(() => {
@@ -139,13 +169,16 @@ export default function Home() {
     }
   }, [logs]);
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (cfg?: AppConfig) => {
+    const targetConfig = cfg || config;
     try {
-      const res = await fetch('/api/questions');
+      const queryParam = encodeURIComponent(JSON.stringify(targetConfig));
+      const res = await fetch(`/api/questions?config=${queryParam}`);
       const data = await res.json();
       if (data.success) {
         setQuestions(data.questions || []);
-        setRawCsvText(data.rawCsv || '');
+        if (data.source) setQuestionsSource(data.source);
+        if (data.rawCsv) setRawCsvText(data.rawCsv);
       }
     } catch (e) {
       console.error('Error loading questions', e);
@@ -158,17 +191,17 @@ export default function Home() {
       const res = await fetch('/api/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_raw', rawCsv: rawCsvText }),
+        body: JSON.stringify({ action: 'save_raw', rawCsv: rawCsvText, config }),
       });
       const data = await res.json();
       if (data.success) {
-        setCsvSaveStatus({ type: 'success', message: 'File CSV berhasil diperbarui!' });
+        setCsvSaveStatus({ type: 'success', message: 'Daftar pertanyaan berhasil diperbarui!' });
         fetchQuestions();
       } else {
-        setCsvSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan file CSV' });
+        setCsvSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan pertanyaan' });
       }
     } catch (e: any) {
-      setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan file CSV' });
+      setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan pertanyaan' });
     }
   };
 
@@ -178,7 +211,7 @@ export default function Home() {
       const res = await fetch('/api/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_all', questions: updatedList }),
+        body: JSON.stringify({ action: 'save_all', questions: updatedList, config }),
       });
       const data = await res.json();
       if (data.success) {
@@ -190,6 +223,33 @@ export default function Home() {
       }
     } catch (e: any) {
       setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan pertanyaan' });
+    }
+  };
+
+  const handleSeedFromCsv = async () => {
+    if (!config.googleCredentialsJson || !config.spreadsheetId) {
+      alert('Silakan atur Spreadsheet ID dan Google Credentials JSON terlebih dahulu di menu Konfigurasi.');
+      return;
+    }
+    if (!confirm('Apakah Anda ingin menyalin 200+ pertanyaan bawaan ke Google Sheets tab "Screening Questions"?')) return;
+
+    setCsvSaveStatus(null);
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'seed_from_csv', config }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        setQuestions(data.questions || []);
+        fetchQuestions();
+      } else {
+        alert(`❌ ${data.error || 'Gagal menyalin pertanyaan'}`);
+      }
+    } catch (e: any) {
+      alert(`❌ Error: ${e.message}`);
     }
   };
 
@@ -221,7 +281,7 @@ export default function Home() {
   };
 
   const handleDeleteQuestion = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus pertanyaan ini dari database CSV?')) return;
+    if (!confirm('Apakah Anda yakin ingin menghapus pertanyaan ini dari database?')) return;
     const updated = questions.filter((q) => q.id !== id);
     await handleSaveQuestionsList(updated);
   };
@@ -235,21 +295,23 @@ export default function Home() {
       if (loadedConfig && typeof loadedConfig === 'object') {
         setConfig((prev) => ({ ...prev, ...loadedConfig }));
       }
-    } catch (e) {
-      // ignore abort or temporary network blips
+    } catch {
+      // ignore
     }
   };
 
-  const fetchAppliedHistory = async () => {
+  const fetchAppliedHistory = async (cfg?: AppConfig) => {
+    const targetConfig = cfg || config;
     try {
-      const res = await fetch('/api/applied');
+      const queryParam = encodeURIComponent(JSON.stringify(targetConfig));
+      const res = await fetch(`/api/applied?config=${queryParam}`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
         setAppliedJobs(data.data || []);
       }
-    } catch (e) {
-      // ignore abort or temporary network blips
+    } catch {
+      // ignore
     }
   };
 
@@ -259,8 +321,8 @@ export default function Home() {
       if (!res.ok) return;
       const data = await res.json();
       setIsSetupBrowserRunning(!!data.isRunning);
-    } catch (e) {
-      // ignore abort
+    } catch {
+      // ignore
     }
   };
 
@@ -271,6 +333,10 @@ export default function Home() {
     setSaveStatus(null);
     setIsSavingConfig(true);
     try {
+      // 1. Save to LocalStorage immediately
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+
+      // 2. Sync with API endpoint
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -278,9 +344,10 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        setSaveStatus({ type: 'success', message: '✅ Konfigurasi & Profil berhasil disimpan!' });
+        setSaveStatus({ type: 'success', message: '✅ Konfigurasi tersimpan di LocalStorage & Server!' });
         setTimeout(() => setSaveStatus(null), 4000);
-        fetchAppliedHistory();
+        fetchAppliedHistory(config);
+        fetchQuestions(config);
       } else {
         setSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan konfigurasi' });
       }
@@ -288,6 +355,36 @@ export default function Home() {
       setSaveStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan' });
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  const handleExportConfig = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(config, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `cv-blaster-config-${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    if (e.target.files && e.target.files[0]) {
+      fileReader.readAsText(e.target.files[0], 'UTF-8');
+      fileReader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target?.result as string);
+          const merged = { ...config, ...parsed };
+          setConfig(merged);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          alert('✅ Konfigurasi berhasil diimpor!');
+          fetchAppliedHistory(merged);
+          fetchQuestions(merged);
+        } catch {
+          alert('❌ Format file JSON konfigurasi tidak valid.');
+        }
+      };
     }
   };
 
@@ -313,23 +410,15 @@ export default function Home() {
     }
   };
 
-  const [sheetsWarning, setSheetsWarning] = useState<{
-    open: boolean;
-    error: string;
-    mode: 'headless' | 'headful';
-  } | null>(null);
-
-  const [isCheckingSheets, setIsCheckingSheets] = useState(false);
-
   const executeStartBot = (mode: 'headless' | 'headful' = 'headless') => {
-    setSheetsWarning(null);
     if (isBotRunning) return;
 
     setLogs([`[${new Date().toLocaleTimeString()}] 🚀 Menghubungkan ke Bot Engine (${mode.toUpperCase()})...`]);
     setIsBotRunning(true);
     setActiveTab('logs');
 
-    const eventSource = new EventSource(`/api/run-bot?mode=${mode}`);
+    const configParam = encodeURIComponent(JSON.stringify(config));
+    const eventSource = new EventSource(`/api/run-bot?mode=${mode}&config=${configParam}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
@@ -345,7 +434,7 @@ export default function Home() {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 🔌 Connection closed.`]);
       setIsBotRunning(false);
       eventSource.close();
-      fetchAppliedHistory(); // Refresh history table when done
+      fetchAppliedHistory(config);
     };
   };
 
@@ -367,17 +456,22 @@ export default function Home() {
       console.error('Failed to send stop signal:', e);
     }
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 🛑 Bot execution stopped manually.`]);
-    fetchAppliedHistory();
+    fetchAppliedHistory(config);
   };
 
   const handleCleanCsv = async () => {
     try {
-      const res = await fetch('/api/clean-csv', { method: 'POST' });
+      const res = await fetch('/api/clean-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
+      });
       const data = await res.json();
       if (data.success) {
         alert(`🧼 ${data.message} (${data.count} pertanyaan unik tersimpan)`);
+        fetchQuestions();
       } else {
-        alert(`❌ Gagal membersihkan CSV: ${data.error || data.message}`);
+        alert(`❌ Gagal membersihkan duplikat: ${data.error || data.message}`);
       }
     } catch (error: any) {
       alert(`❌ Error: ${error.message}`);
@@ -476,13 +570,18 @@ export default function Home() {
               setActiveTab('questions');
               fetchQuestions();
             }}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+            className={`px-5 py-3 font-medium text-sm transition border-b-2 flex items-center gap-2 ${
               activeTab === 'questions'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            📋 Database Pertanyaan (CSV)
+            📋 Database Pertanyaan (Google Sheets)
+            {config.googleCredentialsJson && config.spreadsheetId && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                Cloud Sync
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -807,10 +906,43 @@ export default function Home() {
                 )}
               </div>
 
-              <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2 pt-4">
-                Integrasi Google Sheets API
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2 pt-4 flex-wrap gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-200">
+                    Integrasi Google Sheets API (Cloud Database)
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Digunakan untuk menyimpan log riwayat lamaran dan knowledge base pertanyaan kuisioner (tanpa butuh DB).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportConfig}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
+                    title="Unduh backup konfigurasi & profil ke file JSON"
+                  >
+                    📤 Export JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
+                    title="Impor konfigurasi dari file JSON"
+                  >
+                    📥 Import JSON
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImportConfig}
+                    accept=".json"
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                     Google Spreadsheet ID
@@ -826,7 +958,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Nama Sheet (Sheet Name)
+                    Tab Log Lamaran (Sheet Name)
                   </label>
                   <input
                     type="text"
@@ -834,6 +966,19 @@ export default function Home() {
                     placeholder="Contoh: Sheet1"
                     value={config.sheetName}
                     onChange={(e) => setConfig({ ...config, sheetName: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Tab Database Pertanyaan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Screening Questions"
+                    value={config.questionsSheetName || 'Screening Questions'}
+                    onChange={(e) => setConfig({ ...config, questionsSheetName: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -865,27 +1010,29 @@ export default function Home() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={isSavingConfig}
-                className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
-                  isSavingConfig
-                    ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
-                }`}
-              >
-                {isSavingConfig ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Menyimpan Konfigurasi...</span>
-                  </>
-                ) : (
-                  <span>💾 Simpan Konfigurasi</span>
-                )}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="submit"
+                  disabled={isSavingConfig}
+                  className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                    isSavingConfig
+                      ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                  }`}
+                >
+                  {isSavingConfig ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>Menyimpan Konfigurasi...</span>
+                    </>
+                  ) : (
+                    <span>💾 Simpan Konfigurasi</span>
+                  )}
+                </button>
+              </div>
             </form>
           )}
 
@@ -1132,17 +1279,28 @@ export default function Home() {
             </form>
           )}
 
-          {/* TAB 3: QUESTIONS CSV DATABASE */}
+          {/* TAB 3: QUESTIONS GOOGLE SHEETS & CSV DATABASE */}
           {activeTab === 'questions' && (
             <div className="space-y-6">
               {/* Header & Controls */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-200">
-                    📋 Database Pertanyaan Kuisioner ({questions.length} Pertanyaan)
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    File: <code className="text-blue-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded">public/imploye-question.csv</code>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-lg font-semibold text-slate-200">
+                      📋 Knowledge Base Pertanyaan Kuisioner ({questions.length} Pertanyaan)
+                    </h2>
+                    {questionsSource === 'google_sheets' ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets Active ({config.questionsSheetName || 'Screening Questions'})
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Local / Default CSV
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Knowledge base pertanyaan & jawaban kuisioner screening lowongan (Glints, Jobstreet, LinkedIn, Indeed).
                   </p>
                 </div>
 
@@ -1166,6 +1324,17 @@ export default function Home() {
                       📝 Editor Mentah (CSV)
                     </button>
                   </div>
+
+                  {/* Seed from CSV Button */}
+                  {config.googleCredentialsJson && config.spreadsheetId && (
+                    <button
+                      onClick={handleSeedFromCsv}
+                      className="px-3.5 py-1.5 rounded text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5"
+                      title="Salin 200+ pertanyaan default dari CSV ke tab Google Sheets"
+                    >
+                      📥 Migrasi 200+ CSV ke Sheets
+                    </button>
+                  )}
 
                   {/* Add New Question Button */}
                   <button
@@ -1316,7 +1485,7 @@ export default function Home() {
                   <div className="flex justify-between items-center text-xs text-slate-400">
                     <span>Edit teks CSV langsung. Format: <code>Question,Type,Options,Answer</code></span>
                     <button
-                      onClick={fetchQuestions}
+                      onClick={() => fetchQuestions()}
                       className="text-slate-400 hover:text-slate-200 underline transition"
                     >
                       🔄 Reload dari file
@@ -1557,7 +1726,7 @@ export default function Home() {
               <div className="flex justify-between items-center">
                 <span className="text-slate-400 text-sm">Riwayat Pekerjaan yang Dilamar (dari Google Sheets):</span>
                 <button
-                  onClick={fetchAppliedHistory}
+                  onClick={() => fetchAppliedHistory()}
                   className="text-xs text-blue-400 hover:underline"
                 >
                   🔄 Refresh Data

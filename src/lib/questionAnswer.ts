@@ -22,119 +22,25 @@ import { parse } from "csv-parse/sync";
 import fs, { readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getConfig } from "./config";
+import { AppConfig, getConfig } from "./config";
+import { getQuestionsFromSheet, ScreeningQuestionItem } from "./googleSheets";
 
-// ---------------------------------------------------------------------------
-// 1. YOUR PROFILE — edit these to match your actual situation
-// ---------------------------------------------------------------------------
-const skills = [
-  // Programming Languages
-  "JavaScript",
-  "TypeScript",
-  "Python",
-  "Java",
-  "C#",
-  "C++",
-  "PHP",
-  "Go",
-  "HTML",
-  "CSS",
-
-  // Frontend
-  "React",
-  "React.js",
-  "Next.js",
-  "Angular",
-  "Angular.js",
-  "Tailwind CSS",
-  "Bootstrap",
-  "jQuery",
-  "Framer Motion",
-  "Three.js",
-  "React Three Fiber",
-  "Drei",
-
-  // Backend
-  "Node.js",
-  "Express.js",
-  "Fiber",
-  "GORM",
-  "REST API",
-  "RESTful API",
-
-  // Backend / Async / Messaging
-  "Redis",
-  "RabbitMQ",
-  "Celery",
-  "Asynq",
-  "message queue",
-  "kafka",
-
-  // Database
-  "PostgreSQL",
-  "MySQL",
-  "Supabase",
-  "Prisma",
-  "SQL",
-
-  // DevOps / Infrastructure
-  "Docker",
-  "Nginx",
-  "PM2",
-  "Git",
-  "GitHub",
-  "GitHub Actions",
-  "Cloudflare",
-  "Let's Encrypt",
-  "Certbot",
-  "CI/CD",
-
-  // Development Tools
-  "Postman",
-  "VS Code",
-  "Git",
-  "GitHub",
-
-  // Architecture / Development
-  "Full Stack Development",
-  "Backend Development",
-  "Frontend Development",
-  "Web Development",
-  "API Development",
-  "Database Design",
-  "Microservices",
-  "Object-Oriented Programming",
-  "Asynchronous Programming",
-
-  // Frameworks / Platforms
-  "Next.js",
-  "Angular",
-  "React",
-  "Node.js",
-
-  // Other
-  "Blender",
-  "TouchDesigner",
-  "MediaPipe",
-  "figma",
-  "clickup",
-  "jira",
-  "trello",
-  "slack",
-  "notion",
-
-  // Methodologies
-  "Agile",
-  "Scrum",
-  "Problem Solving",
-  "Debugging"
+const defaultSkills = [
+  "JavaScript", "TypeScript", "Python", "Java", "C#", "C++", "PHP", "Go", "HTML", "CSS",
+  "React", "React.js", "Next.js", "Angular", "Angular.js", "Tailwind CSS", "Bootstrap", "jQuery",
+  "Framer Motion", "Three.js", "React Three Fiber", "Drei", "Node.js", "Express.js", "Fiber", "GORM",
+  "REST API", "RESTful API", "Redis", "RabbitMQ", "Celery", "Asynq", "message queue", "kafka",
+  "PostgreSQL", "MySQL", "Supabase", "Prisma", "SQL", "Docker", "Nginx", "PM2", "Git", "GitHub",
+  "GitHub Actions", "Cloudflare", "Let's Encrypt", "Certbot", "CI/CD", "Postman", "VS Code",
+  "Full Stack Development", "Backend Development", "Frontend Development", "Web Development",
+  "API Development", "Database Design", "Microservices", "Object-Oriented Programming",
+  "Asynchronous Programming", "Blender", "TouchDesigner", "MediaPipe", "figma", "clickup", "jira",
+  "trello", "slack", "notion", "Agile", "Scrum", "Problem Solving", "Debugging"
 ];
 
-
-
-export function getDynamicProfile() {
+export function getDynamicProfile(customConfig?: AppConfig) {
   try {
-    const cfg = getConfig();
+    const cfg = customConfig || getConfig();
     return {
       expectedMonthlySalaryIDR: Number(cfg.expectedSalary) || 8_000_000,
       educationLevel: cfg.educationLevel || "Sarjana (S1)",
@@ -191,15 +97,15 @@ export function getDynamicProfile() {
   }
 }
 
-export function getDynamicSkills(): string[] {
+export function getDynamicSkills(customConfig?: AppConfig): string[] {
   try {
-    const cfg = getConfig();
+    const cfg = customConfig || getConfig();
     if (cfg.skills && cfg.skills.trim().length > 0) {
       const userSkills = cfg.skills.split(',').map(s => s.trim()).filter(s => s.length > 0);
-      return Array.from(new Set([...userSkills, ...skills]));
+      return Array.from(new Set([...userSkills, ...defaultSkills]));
     }
   } catch {}
-  return skills;
+  return defaultSkills;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,9 +219,9 @@ function closestExperienceOption(options: string[], years: number): string {
   return best;
 }
 
-function yearsForRole(question: string): number {
-  const cfg = getConfig();
-  const profile = getDynamicProfile();
+function yearsForRole(question: string, customConfig?: AppConfig): number {
+  const cfg = customConfig || getConfig();
+  const profile = getDynamicProfile(cfg);
   const defaultYrs = Number(cfg.yearsOfExperience) || profile.defaultExperienceYears || 3;
   const lower = question.toLowerCase();
 
@@ -341,13 +247,14 @@ function yearsForRole(question: string): number {
 function tryRegexAnswer(
   question: string,
   options: string[],
-  type: QuestionType
+  type: QuestionType,
+  customConfig?: AppConfig
 ): string[] | null {
+  const cfg = customConfig || getConfig();
   const q = question.toLowerCase();
-  const profile = getDynamicProfile();
-  const dynamicSkills = getDynamicSkills();
+  const profile = getDynamicProfile(cfg);
+  const dynamicSkills = getDynamicSkills(cfg);
 
-  const cfg = getConfig();
   const fullName = (cfg.fullName || "Yoga Adi Saputra").trim();
   const nameParts = fullName.split(/\s+/);
   const firstName = nameParts[0] || "Yoga";
@@ -692,11 +599,12 @@ const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 async function askLLM(
   question: string,
   options: string[],
-  type: QuestionType
+  type: QuestionType,
+  customConfig?: AppConfig
 ): Promise<string[]> {
-  const profile = getDynamicProfile();
-  const dynamicSkills = getDynamicSkills();
-  const cfg = getConfig();
+  const cfg = customConfig || getConfig();
+  const profile = getDynamicProfile(cfg);
+  const dynamicSkills = getDynamicSkills(cfg);
 
   if (type === "text" || options.length === 0) {
     const prompt = `You are answering a job application screening question on behalf of a candidate.
@@ -777,55 +685,7 @@ Reply with ONLY the chosen option(s), copied exactly from the list. If choosing 
 }
 
 // ---------------------------------------------------------------------------
-// 6. Main pipeline
-// ---------------------------------------------------------------------------
-
-async function main() {
-  const inputPath = process.argv[2];
-  if (!inputPath) {
-    console.error("Usage: npx tsx answer-screening-questions-v2.ts <input.csv>");
-    process.exit(1);
-  }
-
-  const rows = loadRows(inputPath);
-  const results: AnsweredRow[] = [];
-
-  for (const row of rows) {
-    const options = splitOptions(row.optionsRaw);
-    const regexAnswer = tryRegexAnswer(row.question, options, row.type);
-
-    if (regexAnswer !== null) {
-      results.push({ ...row, options, answers: regexAnswer, source: "regex" });
-      continue;
-    }
-
-    try {
-      const llmAnswer = await askLLM(row.question, options, row.type);
-      results.push({ ...row, options, answers: llmAnswer, source: "llm" });
-    } catch (err) {
-      console.error(`LLM call failed for "${row.question}":`, err);
-      results.push({ ...row, options, answers: [], source: "unmatched" });
-    }
-  }
-
-  const regexCount = results.filter((r) => r.source === "regex").length;
-  const llmCount = results.filter((r) => r.source === "llm").length;
-  const unmatchedCount = results.filter((r) => r.source === "unmatched").length;
-  console.log(
-    `Done: ${results.length} questions -> ${regexCount} via regex, ${llmCount} via LLM, ${unmatchedCount} unmatched`
-  );
-
-  const outPath = inputPath.replace(/\.csv$/, "") + "-answered.csv";
-  const csvLines = results.map((r) => {
-    const answerStr = r.answers.join(" || ").replace(/"/g, '""');
-    return `"${r.url}","${r.question.replace(/"/g, '""')}","${r.type}","${answerStr}","${r.source}"`;
-  });
-  writeFileSync(outPath, csvLines.join("\n"), "utf-8");
-  console.log(`Written to ${outPath}`);
-}
-
-// ---------------------------------------------------------------------------
-// 5. In-Memory Knowledge Base Cache (High-Performance RAM Lookup)
+// 6. In-Memory Knowledge Base Cache (Google Sheets & Local Fallback)
 // ---------------------------------------------------------------------------
 
 interface CachedQuestion {
@@ -838,7 +698,7 @@ interface CachedQuestion {
 }
 
 let memoryCache: {
-  mtimeMs: number;
+  timestamp: number;
   items: CachedQuestion[];
 } | null = null;
 
@@ -846,77 +706,94 @@ export function invalidateKnowledgeBaseCache() {
   memoryCache = null;
 }
 
-export function getKnowledgeBase(): CachedQuestion[] {
-  const csvPath = path.join(process.cwd(), 'public', 'imploye-question.csv');
-  if (!fs.existsSync(csvPath)) return [];
+export function transformQuestionsToCache(
+  questions: Array<{ question: string; type?: string; options?: string; answer?: string }>
+): CachedQuestion[] {
+  const items: CachedQuestion[] = [];
+  for (const row of questions) {
+    const q = (row.question || '').trim();
+    const answerRaw = (row.answer || '').trim();
+    if (!q || !answerRaw) continue;
 
-  try {
-    const stats = fs.statSync(csvPath);
-    if (memoryCache && memoryCache.mtimeMs === stats.mtimeMs) {
-      return memoryCache.items;
-    }
+    const clean = q.toLowerCase().trim();
+    const normalized = clean.replace(/[^a-z0-9]/g, '');
+    const words = new Set(clean.split(/\s+/).filter(w => w.length > 2));
+    const answers = answerRaw.split('||').map(a => a.trim()).filter(a => a.length > 0);
+    const options = (row.options || '').split('|').map(o => o.trim()).filter(o => o.length > 0);
 
-    const content = fs.readFileSync(csvPath, 'utf8');
-    const records: string[][] = parse(content, {
-      columns: false,
-      skip_empty_lines: true,
-      relax_column_count: true,
-      relax_quotes: true,
+    items.push({
+      rawQuestion: q,
+      normalized,
+      words,
+      type: (row.type || 'radiobutton').toLowerCase().trim(),
+      options,
+      answers,
     });
-
-    const items: CachedQuestion[] = [];
-    for (let i = 1; i < records.length; i++) {
-      const cols = records[i];
-      if (!cols || cols.length < 2) continue;
-
-      let q = '';
-      let type = '';
-      let optionsRaw = '';
-      let answerRaw = '';
-
-      if (cols.length >= 4) {
-        q = cols[0] || '';
-        type = (cols[1] || '').trim().toLowerCase();
-        optionsRaw = cols[2] || '';
-        answerRaw = cols[3] || '';
-      } else if (cols.length === 3) {
-        q = cols[0] || '';
-        optionsRaw = cols[1] || '';
-        answerRaw = cols[2] || '';
-      }
-
-      if (!q.trim() || !answerRaw.trim()) continue;
-
-      const clean = q.toLowerCase().trim();
-      const normalized = clean.replace(/[^a-z0-9]/g, '');
-      const words = new Set(clean.split(/\s+/).filter(w => w.length > 2));
-      const answers = answerRaw.split('||').map(a => a.trim()).filter(a => a.length > 0);
-      const options = optionsRaw.split('|').map(o => o.trim()).filter(o => o.length > 0);
-
-      items.push({
-        rawQuestion: q,
-        normalized,
-        words,
-        type,
-        options,
-        answers,
-      });
-    }
-
-    memoryCache = {
-      mtimeMs: stats.mtimeMs,
-      items,
-    };
-    return items;
-  } catch {
-    return memoryCache ? memoryCache.items : [];
   }
+  return items;
 }
 
-// Search local imploye-question.csv in-memory cache for matching question (Knowledge Base)
-function getPreAnsweredQuestion(questionText: string, options: string[]): string[] | null {
-  const items = getKnowledgeBase();
-  if (items.length === 0) return null;
+export async function ensureKnowledgeBaseLoaded(customConfig?: AppConfig): Promise<CachedQuestion[]> {
+  const now = Date.now();
+  if (memoryCache && now - memoryCache.timestamp < 60000) {
+    return memoryCache.items;
+  }
+
+  const cfg = customConfig || getConfig();
+
+  // 1. Priority: Load from Google Sheets (Screening Questions tab)
+  if (cfg.googleCredentialsJson && cfg.spreadsheetId) {
+    try {
+      const sheetQuestions = await getQuestionsFromSheet(false, cfg);
+      if (sheetQuestions.length > 0) {
+        const items = transformQuestionsToCache(sheetQuestions);
+        memoryCache = { timestamp: now, items };
+        return items;
+      }
+    } catch (e) {
+      console.warn('[KnowledgeBase] Failed to fetch from Google Sheets, falling back to local CSV if available:', e);
+    }
+  }
+
+  // 2. Fallback: Read local imploye-question.csv if exists
+  try {
+    const csvPath = path.join(process.cwd(), 'public', 'imploye-question.csv');
+    if (fs.existsSync(csvPath)) {
+      const content = fs.readFileSync(csvPath, 'utf8');
+      const records: string[][] = parse(content, {
+        columns: false,
+        skip_empty_lines: true,
+        relax_column_count: true,
+        relax_quotes: true,
+      });
+
+      const parsed: Array<{ question: string; type: string; options: string; answer: string }> = [];
+      for (let i = 1; i < records.length; i++) {
+        const cols = records[i];
+        if (!cols || cols.length < 2) continue;
+        if (cols.length >= 4) {
+          parsed.push({ question: cols[0] || '', type: cols[1] || '', options: cols[2] || '', answer: cols[3] || '' });
+        } else if (cols.length === 3) {
+          parsed.push({ question: cols[0] || '', type: 'radiobutton', options: cols[1] || '', answer: cols[2] || '' });
+        }
+      }
+
+      const items = transformQuestionsToCache(parsed);
+      memoryCache = { timestamp: now, items };
+      return items;
+    }
+  } catch {}
+
+  return memoryCache ? memoryCache.items : [];
+}
+
+export function getKnowledgeBase(): CachedQuestion[] {
+  return memoryCache ? memoryCache.items : [];
+}
+
+// Search knowledge base cache for matching question
+function getPreAnsweredQuestion(questionText: string, options: string[], cachedItems: CachedQuestion[]): string[] | null {
+  if (cachedItems.length === 0) return null;
 
   try {
     const targetClean = questionText.toLowerCase().trim();
@@ -926,7 +803,7 @@ function getPreAnsweredQuestion(questionText: string, options: string[]): string
     let bestMatchAnswers: string[] | null = null;
     let highestOverlap = 0;
 
-    for (const item of items) {
+    for (const item of cachedItems) {
       // 1. Exact Normalized Match
       const isExactMatch = targetNormalized === item.normalized;
 
@@ -980,31 +857,35 @@ function getPreAnsweredQuestion(questionText: string, options: string[]): string
 export async function answerQuestion(
   question: string,
   options: string[],
-  type: "dropdown" | "checklist" | "radiobutton" | "text" | "unknown"
+  type: "dropdown" | "checklist" | "radiobutton" | "text" | "unknown",
+  customConfig?: AppConfig
 ): Promise<string[]> {
+  const cfg = customConfig || getConfig();
   try {
-    // 1. Priority: Check Local Knowledge Base Cache (imploye-question.csv)
-    const cachedAnswers = getPreAnsweredQuestion(question, options);
+    // 1. Priority: Check Google Sheets Knowledge Base Cache
+    const cachedItems = await ensureKnowledgeBaseLoaded(cfg);
+    const cachedAnswers = getPreAnsweredQuestion(question, options, cachedItems);
     if (cachedAnswers !== null) {
       return cachedAnswers;
     }
 
     // 2. Second Priority: Regex pattern rules
     const normType = type as QuestionType;
-    const regexAnswer = tryRegexAnswer(question, options, normType);
+    const regexAnswer = tryRegexAnswer(question, options, normType, cfg);
     if (regexAnswer !== null) {
+      // Asynchronously learn & append to Google Sheets knowledge base
+      const { appendQuestionToSheet } = require('./googleSheets');
+      appendQuestionToSheet(question, type, options, regexAnswer, cfg).catch(() => {});
       return regexAnswer;
     }
 
     // 3. Fallback: Ask Gemini LLM
-    return await askLLM(question, options, normType);
+    const llmAnswer = await askLLM(question, options, normType, cfg);
+    const { appendQuestionToSheet } = require('./googleSheets');
+    appendQuestionToSheet(question, type, options, llmAnswer, cfg).catch(() => {});
+    return llmAnswer;
   } catch (err) {
     console.error(`AI failed to answer "${question}":`, err);
-    return [options[0]]; // fallback to first option
+    return [options[0] || ""]; // fallback to first option
   }
-}
-
-// Only run main if executed directly
-if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  main().catch(console.error);
 }

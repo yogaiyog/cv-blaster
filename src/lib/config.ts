@@ -4,6 +4,7 @@ import path from 'path';
 export interface AppConfig {
   spreadsheetId: string;
   sheetName: string;
+  questionsSheetName?: string;
   googleCredentialsJson: string;
   searchKeywords: string;
   location: string;
@@ -40,9 +41,10 @@ export interface AppConfig {
 
 const CONFIG_PATH = path.join(process.cwd(), 'config.json');
 
-const DEFAULT_CONFIG: AppConfig = {
+export const DEFAULT_CONFIG: AppConfig = {
   spreadsheetId: '',
   sheetName: 'Sheet1',
+  questionsSheetName: 'Screening Questions',
   googleCredentialsJson: '',
   searchKeywords: '',
   location: '',
@@ -76,26 +78,44 @@ const DEFAULT_CONFIG: AppConfig = {
   domicile: 'Jakarta Selatan, DKI Jakarta',
 };
 
-export function getConfig(): AppConfig {
+// In-memory runtime fallback for serverless environments
+let memoryConfig: AppConfig | null = null;
+
+export function getConfig(override?: Partial<AppConfig>): AppConfig {
+  if (override && Object.keys(override).length > 0) {
+    return { ...DEFAULT_CONFIG, ...(memoryConfig || {}), ...override };
+  }
+
+  if (memoryConfig) {
+    return memoryConfig;
+  }
+
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-      return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      const resolved: AppConfig = { ...DEFAULT_CONFIG, ...parsed };
+      memoryConfig = resolved;
+      return resolved;
     }
-  } catch (error) {
-    console.error('Error reading config:', error);
+  } catch {
+    // Readonly / serverless environment fallback
   }
+
   return DEFAULT_CONFIG;
 }
 
 export function saveConfig(config: Partial<AppConfig>): AppConfig {
+  const current = getConfig();
+  const updated = { ...current, ...config };
+  memoryConfig = updated;
+
   try {
-    const current = getConfig();
-    const updated = { ...current, ...config };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), 'utf8');
-    return updated;
   } catch (error) {
-    console.error('Error writing config:', error);
-    throw new Error('Failed to save configuration');
+    // In serverless / read-only environments, writing to disk fails silently while memoryConfig holds the state
+    console.warn('Filesystem is read-only (serverless mode). Config saved in memory.');
   }
+
+  return updated;
 }

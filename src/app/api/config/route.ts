@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // If Google Sheet config is provided, initialize headers in the background without blocking the save response
     if (updated.spreadsheetId && updated.googleCredentialsJson) {
-      initializeSheet().catch((sheetError) => {
+      initializeSheet(updated).catch((sheetError) => {
         console.warn('Could not initialize Google Sheet headers yet:', sheetError?.message || sheetError);
       });
     }

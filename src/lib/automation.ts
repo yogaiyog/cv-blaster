@@ -1,5 +1,5 @@
 import path from 'path';
-import { getConfig } from './config';
+import { AppConfig, getConfig } from './config';
 import { runGlintsBot } from './bots/glints';
 import { runJobstreetBot } from './bots/jobstreet';
 import { runLinkedinBot } from './bots/linkedin';
@@ -9,7 +9,11 @@ declare global {
   var isBotRunning: boolean;
 }
 
-export async function startBot(onLog: (msg: string) => void, mode: string = 'headless') {
+export async function startBot(
+  onLog: (msg: string) => void,
+  mode: string = 'headless',
+  customConfig?: AppConfig
+) {
   if (global.isBotRunning) {
     onLog('⚠️ Bot is already running!');
     return;
@@ -20,7 +24,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
 
   let browser: any = null;
   try {
-    const config = getConfig();
+    const config = customConfig || getConfig();
 
     // Verify GEMINI_API_KEY is set in environment or .env
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.trim() === '') {
@@ -34,7 +38,7 @@ export async function startBot(onLog: (msg: string) => void, mode: string = 'hea
     // Test Google Sheets connection
     onLog('📊 Menguji koneksi ke Google Sheets...');
     const { testSheetsConnection } = require('./googleSheets');
-    const sheetsTest = await testSheetsConnection();
+    const sheetsTest = await testSheetsConnection(config);
     if (sheetsTest.success) {
       onLog(`✅ Google Sheets terhubung: ${sheetsTest.message}`);
     } else {
