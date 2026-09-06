@@ -1145,22 +1145,6 @@ export default function Home() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/80 transition flex items-center gap-1.5 shadow-sm"
-                    title="Panduan lengkap langkah demi langkah setup Service Account & Google Sheets"
-                  >
-                    <span>📖</span> Tutorial Setup Sheets
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsTemplateModalOpen(true)}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-blue-950/80 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 transition flex items-center gap-1.5 shadow-sm"
-                    title="Pilih template profesi (Fullstack, Finance, Digital Marketing, Guru, Data Analis, QA, DevOps, Project Manager)"
-                  >
-                    📋 Template Profesi
-                  </button>
-                  <button
-                    type="button"
                     onClick={handleExportConfig}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
                     title="Unduh backup konfigurasi & profil ke file JSON"
@@ -1176,21 +1160,6 @@ export default function Home() {
                     📥 Import JSON
                   </button>
                 </div>
-              </div>
-
-              <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-lg flex items-center justify-between text-xs text-blue-300 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">💡</span>
-                  <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
-                  className="font-semibold text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
-                >
-                  <span>Buka Tutorial Langkah Demi Langkah</span>
-                  <span>→</span>
-                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
