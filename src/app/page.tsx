@@ -251,32 +251,6 @@ export default function Home() {
     }
   };
 
-  const handleSeedFromCsv = async () => {
-    if (!config.googleCredentialsJson || !config.spreadsheetId) {
-      alert('Silakan atur Spreadsheet ID dan Google Credentials JSON terlebih dahulu di menu Konfigurasi.');
-      return;
-    }
-    if (!confirm('Apakah Anda ingin menyalin 200+ pertanyaan bawaan ke Google Sheets tab "Screening Questions"?')) return;
-
-    setCsvSaveStatus(null);
-    try {
-      const res = await fetch('/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'seed_from_csv', config }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`✅ ${data.message}`);
-        setQuestions(data.questions || []);
-        fetchQuestions();
-      } else {
-        alert(`❌ ${data.error || 'Gagal menyalin pertanyaan'}`);
-      }
-    } catch (e: any) {
-      alert(`❌ Error: ${e.message}`);
-    }
-  };
 
   const handleAddNewQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1350,16 +1324,6 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* Seed from CSV Button */}
-                  {config.googleCredentialsJson && config.spreadsheetId && (
-                    <button
-                      onClick={handleSeedFromCsv}
-                      className="px-3.5 py-1.5 rounded text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5"
-                      title="Salin 200+ pertanyaan default dari CSV ke tab Google Sheets"
-                    >
-                      📥 Migrasi 200+ CSV ke Sheets
-                    </button>
-                  )}
 
                   {/* Add New Question Button */}
                   <button
