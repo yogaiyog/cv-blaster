@@ -13,6 +13,163 @@ export interface ScreeningQuestionItem {
   updatedAt?: string;
 }
 
+export interface SheetsQuotaMetrics {
+  totalWrites: number;
+  successfulWrites: number;
+  failedWrites: number;
+  rateLimitHits: number;
+  queueLength: number;
+  isProcessing: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// RATE LIMITING, QUEUE & EXPONENTIAL BACKOFF
+// ---------------------------------------------------------------------------
+
+const sheetsMetrics: SheetsQuotaMetrics = {
+  totalWrites: 0,
+  successfulWrites: 0,
+  failedWrites: 0,
+  rateLimitHits: 0,
+  queueLength: 0,
+  isProcessing: false,
+};
+
+export function getSheetsQuotaMetrics(): SheetsQuotaMetrics {
+  return {
+    ...sheetsMetrics,
+    queueLength: writeQueue.length,
+  };
+}
+
+type QueueTask<T> = {
+  fn: () => Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: any) => void;
+  description: string;
+};
+
+const writeQueue: Array<QueueTask<any>> = [];
+let isQueueWorkerRunning = false;
+const MIN_WRITE_INTERVAL_MS = 600; // ~600ms spacing to maintain safe rate under 60 writes/min
+
+const initializedTabs = new Set<string>();
+
+export function isTabInitialized(spreadsheetId: string, tabName: string): boolean {
+  return initializedTabs.has(`${spreadsheetId}:${tabName}`);
+}
+
+export function markTabInitialized(spreadsheetId: string, tabName: string) {
+  initializedTabs.add(`${spreadsheetId}:${tabName}`);
+}
+
+/**
+ * Executes a Google Sheets API call with automatic exponential backoff retry
+ * whenever rate limit (429), quota exhaustion, or transient network errors occur.
+ */
+export async function executeWithRetry<T>(
+  operation: () => Promise<T>,
+  description = 'Google Sheets Operation',
+  maxRetries = 5,
+  initialDelayMs = 1500
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      attempt++;
+      const errorMessage = error?.message || String(error);
+      const statusCode = error?.status || error?.code || error?.response?.status;
+
+      const isRateLimit =
+        statusCode === 429 ||
+        (statusCode === 403 && (errorMessage.includes('quota') || errorMessage.includes('rateLimit') || errorMessage.includes('RESOURCE_EXHAUSTED'))) ||
+        errorMessage.toLowerCase().includes('quota') ||
+        errorMessage.toLowerCase().includes('rate limit') ||
+        errorMessage.toLowerCase().includes('resource_exhausted') ||
+        errorMessage.toLowerCase().includes('too many requests');
+
+      const isTransientNetwork =
+        statusCode === 500 ||
+        statusCode === 502 ||
+        statusCode === 503 ||
+        statusCode === 504 ||
+        errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('ECONNRESET') ||
+        errorMessage.includes('socket hang up');
+
+      if ((isRateLimit || isTransientNetwork) && attempt <= maxRetries) {
+        if (isRateLimit) {
+          sheetsMetrics.rateLimitHits++;
+        }
+        const jitter = Math.floor(Math.random() * 500);
+        const delay = initialDelayMs * Math.pow(2, attempt - 1) + jitter;
+
+        console.warn(
+          `⚠️ [Google Sheets API Quota] ${description} terkendala (${isRateLimit ? 'Rate Limit 429 / Quota Exceeded' : 'Network ' + statusCode}). ` +
+          `Menunggu ${(delay / 1000).toFixed(1)}s sebelum mencoba kembali (Percobaan ${attempt}/${maxRetries})...`
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
+/**
+ * Enqueues a write operation to serialize Google Sheets writes and prevent concurrent workers from smashing the API.
+ */
+export function enqueueSheetsWrite<T>(
+  operation: () => Promise<T>,
+  description = 'Write to Sheet'
+): Promise<T> {
+  sheetsMetrics.totalWrites++;
+  return new Promise<T>((resolve, reject) => {
+    writeQueue.push({
+      fn: operation,
+      resolve,
+      reject,
+      description,
+    });
+    processWriteQueue();
+  });
+}
+
+async function processWriteQueue() {
+  if (isQueueWorkerRunning) return;
+  isQueueWorkerRunning = true;
+  sheetsMetrics.isProcessing = true;
+
+  while (writeQueue.length > 0) {
+    const task = writeQueue.shift();
+    if (!task) break;
+
+    try {
+      const result = await executeWithRetry(task.fn, task.description);
+      sheetsMetrics.successfulWrites++;
+      task.resolve(result);
+    } catch (err: any) {
+      sheetsMetrics.failedWrites++;
+      console.error(`❌ [Google Sheets Queue Error] Gagal mengeksekusi ${task.description}:`, err.message || err);
+      task.reject(err);
+    }
+
+    // Minimum delay between writes to avoid bursting Google Sheets API
+    await new Promise((resolve) => setTimeout(resolve, MIN_WRITE_INTERVAL_MS));
+  }
+
+  isQueueWorkerRunning = false;
+  sheetsMetrics.isProcessing = false;
+}
+
+// ---------------------------------------------------------------------------
+// CLIENT INITIALIZATION
+// ---------------------------------------------------------------------------
+
 export function getSheetsClient(customConfig?: AppConfig) {
   const config = customConfig || getConfig();
   if (!config.googleCredentialsJson) {
@@ -65,22 +222,24 @@ export async function getAppliedJobs(
   }
 
   try {
-    const sheets = getSheetsClient(config);
-    const sheetTab = config.sheetName || 'Sheet1';
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: config.spreadsheetId,
-      range: `${sheetTab}!A2:F`, // A: Company, B: Title, C: Platform, D: Job URL, E: Date, F: Status
-    });
+    const data = await executeWithRetry(async () => {
+      const sheets = getSheetsClient(config);
+      const sheetTab = config.sheetName || 'Sheet1';
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: config.spreadsheetId,
+        range: `${sheetTab}!A2:F`,
+      });
 
-    const rows = response.data.values || [];
-    const data = rows.map((row) => ({
-      company: row[0] || '',
-      title: row[1] || '',
-      platform: row[2] || '',
-      jobUrl: row[3] || '',
-      date: row[4] || '',
-      status: row[5] || '',
-    }));
+      const rows = response.data.values || [];
+      return rows.map((row) => ({
+        company: row[0] || '',
+        title: row[1] || '',
+        platform: row[2] || '',
+        jobUrl: row[3] || '',
+        date: row[4] || '',
+        status: row[5] || '',
+      }));
+    }, 'Get Applied Jobs (Read)');
 
     const urlSet = new Set<string>();
     data.forEach((j) => {
@@ -148,7 +307,7 @@ export async function addAppliedJob(
   const cleanedUrl = cleanJobUrl(job.jobUrl);
   const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 
-  // Update in-memory cache instantly
+  // Update in-memory cache instantly (Non-blocking for concurrent workers)
   if (inMemoryAppliedJobs) {
     if (cleanedUrl) inMemoryAppliedJobs.urlSet.add(cleanedUrl);
     inMemoryAppliedJobs.data.unshift({
@@ -163,7 +322,8 @@ export async function addAppliedJob(
 
   if (!config.googleCredentialsJson || !config.spreadsheetId) return;
 
-  try {
+  // Enqueue write to serialized queue with automatic rate-limit backoff retry
+  enqueueSheetsWrite(async () => {
     const sheets = getSheetsClient(config);
     const sheetTab = config.sheetName || 'Sheet1';
     await sheets.spreadsheets.values.append({
@@ -174,9 +334,9 @@ export async function addAppliedJob(
         values: [[job.company, job.title, job.platform, cleanedUrl, dateStr, job.status]],
       },
     });
-  } catch (error: any) {
-    console.error('Gagal mencatat lamaran ke Google Sheets (koneksi/credentials):', error.message || error);
-  }
+  }, `Append Applied Job [${job.company} - ${job.title}]`).catch((err) => {
+    console.error('Gagal mencatat lamaran ke Google Sheets:', err.message || err);
+  });
 }
 
 export async function isJobAlreadyApplied(jobUrl: string, customConfig?: AppConfig): Promise<boolean> {
@@ -200,17 +360,22 @@ export async function initializeSheet(customConfig?: AppConfig) {
   const config = customConfig || getConfig();
   if (!config.googleCredentialsJson || !config.spreadsheetId) return;
 
+  const sheetTab = config.sheetName || 'Sheet1';
+  if (isTabInitialized(config.spreadsheetId, sheetTab)) return;
+
   try {
-    const sheets = getSheetsClient(config);
-    const sheetTab = config.sheetName || 'Sheet1';
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: config.spreadsheetId,
-      range: `${sheetTab}!A1:F1`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [['Company Name', 'Job Title', 'Platform', 'Job URL', 'Applied Date', 'Status']],
-      },
-    });
+    await executeWithRetry(async () => {
+      const sheets = getSheetsClient(config);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: config.spreadsheetId,
+        range: `${sheetTab}!A1:F1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [['Company Name', 'Job Title', 'Platform', 'Job URL', 'Applied Date', 'Status']],
+        },
+      });
+    }, `Initialize Sheet Tab "${sheetTab}"`);
+    markTabInitialized(config.spreadsheetId, sheetTab);
   } catch (error) {
     console.error('Failed to initialize Google Sheet headers:', error);
   }
@@ -229,11 +394,12 @@ export async function testSheetsConnection(
 
   try {
     const sheets = getSheetsClient(config);
-    const response = await sheets.spreadsheets.get({
-      spreadsheetId: config.spreadsheetId,
-    });
+    const response = await executeWithRetry(async () => {
+      return await sheets.spreadsheets.get({
+        spreadsheetId: config.spreadsheetId,
+      });
+    }, 'Test Sheets Connection');
 
-    // Auto-ensure both tabs exist on connection test
     try {
       await initializeSheet(config);
       await initializeQuestionsSheet(config);
@@ -276,45 +442,55 @@ export async function initializeQuestionsSheet(customConfig?: AppConfig): Promis
   const config = customConfig || getConfig();
   if (!config.googleCredentialsJson || !config.spreadsheetId) return false;
 
+  const qTab = getQuestionsSheetTabName(config);
+  if (isTabInitialized(config.spreadsheetId, qTab)) return true;
+
   try {
     const sheets = getSheetsClient(config);
-    const qTab = getQuestionsSheetTabName(config);
 
     // 1. Check existing sheets
-    const spreadsheet = await sheets.spreadsheets.get({
-      spreadsheetId: config.spreadsheetId,
-    });
+    const spreadsheet = await executeWithRetry(async () => {
+      return await sheets.spreadsheets.get({
+        spreadsheetId: config.spreadsheetId,
+      });
+    }, 'Check Screening Questions Tab');
+
     const sheetTitles = spreadsheet.data.sheets?.map(s => s.properties?.title) || [];
 
     // 2. Create tab if missing
     if (!sheetTitles.includes(qTab)) {
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: config.spreadsheetId,
-        requestBody: {
-          requests: [
-            {
-              addSheet: {
-                properties: {
-                  title: qTab,
-                  gridProperties: { rowCount: 1000, columnCount: 10 }
+      await executeWithRetry(async () => {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: config.spreadsheetId,
+          requestBody: {
+            requests: [
+              {
+                addSheet: {
+                  properties: {
+                    title: qTab,
+                    gridProperties: { rowCount: 1000, columnCount: 10 }
+                  }
                 }
               }
-            }
-          ]
-        }
-      });
+            ]
+          }
+        });
+      }, `Create Tab "${qTab}"`);
     }
 
     // 3. Set header row
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: config.spreadsheetId,
-      range: `${qTab}!A1:E1`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [['Question', 'Type', 'Options', 'Answer', 'Updated At']],
-      },
-    });
+    await executeWithRetry(async () => {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: config.spreadsheetId,
+        range: `${qTab}!A1:E1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [['Question', 'Type', 'Options', 'Answer', 'Updated At']],
+        },
+      });
+    }, `Initialize Header for "${qTab}"`);
 
+    markTabInitialized(config.spreadsheetId, qTab);
     return true;
   } catch (err: any) {
     console.error('Failed to initialize Screening Questions sheet:', err.message || err);
@@ -340,30 +516,33 @@ export async function getQuestionsFromSheet(
   }
 
   try {
-    const sheets = getSheetsClient(config);
     const qTab = getQuestionsSheetTabName(config);
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: config.spreadsheetId,
-      range: `${qTab}!A2:E`,
-    });
-
-    const rows = response.data.values || [];
-    const questions: ScreeningQuestionItem[] = [];
-
-    rows.forEach((row, index) => {
-      const q = (row[0] || '').trim();
-      if (!q) return;
-
-      questions.push({
-        id: `q-${index + 2}-${Math.random().toString(36).substring(2, 6)}`,
-        question: q,
-        type: (row[1] || 'radiobutton').trim(),
-        options: (row[2] || '').trim(),
-        answer: (row[3] || '').trim(),
-        updatedAt: (row[4] || '').trim()
+    const questions = await executeWithRetry(async () => {
+      const sheets = getSheetsClient(config);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: config.spreadsheetId,
+        range: `${qTab}!A2:E`,
       });
-    });
+
+      const rows = response.data.values || [];
+      const list: ScreeningQuestionItem[] = [];
+
+      rows.forEach((row, index) => {
+        const q = (row[0] || '').trim();
+        if (!q) return;
+
+        list.push({
+          id: `q-${index + 2}-${Math.random().toString(36).substring(2, 6)}`,
+          question: q,
+          type: (row[1] || 'radiobutton').trim(),
+          options: (row[2] || '').trim(),
+          answer: (row[3] || '').trim(),
+          updatedAt: (row[4] || '').trim()
+        });
+      });
+
+      return list;
+    }, `Get Questions (Read) "${qTab}"`);
 
     // Auto-seed if sheet tab is completely empty
     if (questions.length === 0) {
@@ -410,7 +589,7 @@ export async function appendQuestionToSheet(
   const answerStr = answers.join(' || ');
   const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 
-  // Update in-memory cache first
+  // Update in-memory cache first (instant lookup for other concurrent workers)
   if (inMemoryQuestions) {
     const isDup = inMemoryQuestions.data.some(
       item => item.question.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedNew
@@ -427,12 +606,10 @@ export async function appendQuestionToSheet(
     });
   }
 
-  try {
+  // Enqueue write to serialized queue with automatic rate-limit backoff retry
+  enqueueSheetsWrite(async () => {
     const sheets = getSheetsClient(config);
     const qTab = getQuestionsSheetTabName(config);
-
-    // Verify questions sheet is initialized
-    await initializeQuestionsSheet(config);
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: config.spreadsheetId,
@@ -442,9 +619,9 @@ export async function appendQuestionToSheet(
         values: [[cleanQ, type, optionsStr, answerStr, dateStr]],
       },
     });
-  } catch (err: any) {
+  }, `Append Question [${cleanQ.substring(0, 30)}...]`).catch((err) => {
     console.error('Failed to append question to Google Sheet:', err.message || err);
-  }
+  });
 }
 
 /**
@@ -459,49 +636,51 @@ export async function saveAllQuestionsToSheet(
     throw new Error('Google Credentials atau Spreadsheet ID belum diatur.');
   }
 
-  const sheets = getSheetsClient(config);
-  const qTab = getQuestionsSheetTabName(config);
-  await initializeQuestionsSheet(config);
+  return enqueueSheetsWrite(async () => {
+    const sheets = getSheetsClient(config);
+    const qTab = getQuestionsSheetTabName(config);
+    await initializeQuestionsSheet(config);
 
-  const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  const rows = questions.map(q => [
-    q.question,
-    q.type || 'radiobutton',
-    q.options || '',
-    q.answer || '',
-    q.updatedAt || dateStr
-  ]);
+    const dateStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+    const rows = questions.map(q => [
+      q.question,
+      q.type || 'radiobutton',
+      q.options || '',
+      q.answer || '',
+      q.updatedAt || dateStr
+    ]);
 
-  // Clear existing content from row 2 onwards
-  try {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: config.spreadsheetId,
-      range: `${qTab}!A2:E10000`,
-    });
-  } catch {}
+    // Clear existing content from row 2 onwards
+    try {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: config.spreadsheetId,
+        range: `${qTab}!A2:E10000`,
+      });
+    } catch {}
 
-  // Write new rows
-  if (rows.length > 0) {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: config.spreadsheetId,
-      range: `${qTab}!A2:E${rows.length + 1}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: rows,
-      },
-    });
-  }
+    // Write new rows
+    if (rows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: config.spreadsheetId,
+        range: `${qTab}!A2:E${rows.length + 1}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: rows,
+        },
+      });
+    }
 
-  inMemoryQuestions = {
-    timestamp: Date.now(),
-    data: questions,
-  };
+    inMemoryQuestions = {
+      timestamp: Date.now(),
+      data: questions,
+    };
 
-  return {
-    success: true,
-    message: `Berhasil menyimpan ${questions.length} pertanyaan ke Google Sheets!`,
-    count: questions.length
-  };
+    return {
+      success: true,
+      message: `Berhasil menyimpan ${questions.length} pertanyaan ke Google Sheets!`,
+      count: questions.length
+    };
+  }, `Batch Save ${questions.length} Questions`);
 }
 
 /**
@@ -604,4 +783,3 @@ export async function seedQuestionsFromCsvIfEmpty(
     return [];
   }
 }
-
