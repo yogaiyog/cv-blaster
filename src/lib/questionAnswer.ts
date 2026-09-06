@@ -635,23 +635,26 @@ Reply with a concise, highly professional, direct answer (1-2 sentences maximum,
       }
     } catch {}
 
-    // Smart context-aware fallback based on question intent
+    // Smart context-aware fallback based on question intent (when AI is unavailable or offline)
     const lowerQ = question.toLowerCase();
     if (/notice|asap|join|mulai kerja|bergabung/i.test(lowerQ)) {
       const notice = profile.noticePeriod || "Immediately";
       return [/asap|immediately|segera/i.test(notice) ? "Saya bersedia untuk segera bergabung (ASAP / Immediately)." : notice];
     }
-    if (/english|bahasa inggris|rate|1 to 10/i.test(lowerQ)) return ["8"];
+    if (/salary|gaji|penghasilan|upah|ekspektasi gaji/i.test(lowerQ)) {
+      return [String(profile.expectedMonthlySalaryIDR || 8000000)];
+    }
+    if (/english|bahasa inggris|rate|1 to 10|skala 1/i.test(lowerQ)) return ["8"];
     if (/gpa|ipk/i.test(lowerQ)) return [profile.gpa || "3.75"];
-    if (/experience|tahun/i.test(lowerQ)) return [String(profile.defaultExperienceYears || 3)];
+    if (/experience|tahun|lama bekerja/i.test(lowerQ)) return [String(profile.defaultExperienceYears || 3)];
     if (/project|proyek/i.test(lowerQ)) return ["4"];
     if (/age|umur|usia/i.test(lowerQ)) return ["24"];
-    if (/phone|telepon|hp|mobile/i.test(lowerQ)) return [cfg.phoneNumber || "081234567890"];
+    if (/phone|telepon|hp|mobile|wa|whatsapp/i.test(lowerQ)) return [cfg.phoneNumber || "081234567890"];
     if (/name|nama/i.test(lowerQ)) return [cfg.fullName || "Yoga Adi Saputra"];
-    if (/why|alasan|describe|ceritakan|jelaskan|introduce/i.test(lowerQ)) {
-      return ["I have 3+ years of experience as a Software Engineer specializing in full stack web development, building robust and scalable applications."];
+    if (/why|alasan|describe|ceritakan|jelaskan|introduce|tentang anda/i.test(lowerQ)) {
+      return ["Saya memiliki keahlian dan pengalaman kerja yang relevan serta siap berkontribusi secara maksimal untuk posisi ini."];
     }
-    return ["Yes"];
+    return ["Ya"];
   }
 
   const multiSelect = type === "checklist";
@@ -686,9 +689,9 @@ Reply with ONLY the chosen option(s), copied exactly from the list. If choosing 
     }
   } catch {}
 
-  // Smart options fallback
-  const firstMatch = options.find(o => /^(ya|yes|setuju|agree|fluent|mahir|sarjana|s1|full-time|wfo|hybrid|remote)$/i.test(o.trim()));
-  return [firstMatch || options[0] || ""];
+  // Smart options fallback (pilihan cerdas / opsi pertama jika tanpa AI)
+  const firstMatch = options.find(o => /^(ya|yes|setuju|agree|fluent|mahir|sarjana|s1|full-time|wfo|hybrid|remote|bersedia|ada|siap|sangat siap|bisa|bisa segera)$/i.test(o.trim()));
+  return [firstMatch || options[0] || "Ya"];
 }
 
 // ---------------------------------------------------------------------------

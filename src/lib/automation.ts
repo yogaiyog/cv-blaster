@@ -26,12 +26,15 @@ export async function startBot(
   try {
     const config = customConfig || getConfig();
 
-    // Verify GEMINI_API_KEY is set in config or environment
+    // Set GEMINI_API_KEY if provided (Optional)
     const geminiApiKey = (config.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
-    if (!geminiApiKey) {
-      throw new Error('Gemini API Key belum diisi. Silakan masukkan Gemini API Key Anda pada tab Konfigurasi.');
+    if (geminiApiKey) {
+      process.env.GEMINI_API_KEY = geminiApiKey;
+      onLog('🧠 Gemini AI aktif untuk menjawab pertanyaan kuesioner baru.');
+    } else {
+      process.env.GEMINI_API_KEY = '';
+      onLog('ℹ️ Gemini API Key tidak diisi (Mode Offline/Tanpa AI). Pertanyaan di luar database akan dijawab dengan aturan default/pilihan pertama.');
     }
-    process.env.GEMINI_API_KEY = geminiApiKey;
 
     if (!config.searchKeywords && !config.indeedNoJobTitleFilter) {
       throw new Error('Search keywords are not configured. Please fill them in first.');

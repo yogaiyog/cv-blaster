@@ -1105,13 +1105,18 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Gemini API Key
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Gemini API Key <span className="text-slate-500 font-normal lowercase">(opsional)</span>
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      Opsional / Tanpa AI
+                    </span>
+                  </div>
                   <div className="relative">
                     <input
                       type={showGeminiKey ? 'text' : 'password'}
-                      placeholder="AIzaSy..."
+                      placeholder="AIzaSy... (kosongkan jika tidak menggunakan AI)"
                       value={config.geminiApiKey || ''}
                       onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 pr-28 text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500 tracking-wider"
@@ -1127,7 +1132,7 @@ export default function Home() {
                   <div className="flex items-start gap-2 text-[11px] text-slate-500 mt-2">
                     <span className="text-blue-400 font-bold">ℹ️</span>
                     <span>
-                      Key disimpan secara lokal di komputer Anda. Anda bisa membuat Gemini API Key gratis tanpa kartu kredit di Google AI Studio.
+                      <strong>Opsional:</strong> Jika diisi, bot menggunakan Gemini AI untuk menjawab pertanyaan kuesioner baru secara cerdas. Jika dikosongkan, bot tetap bekerja normal menggunakan Database Pertanyaan dan pilihan opsi default.
                     </span>
                   </div>
                 </div>
