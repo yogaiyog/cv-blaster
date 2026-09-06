@@ -82,27 +82,35 @@ export const DEFAULT_CONFIG: AppConfig = {
 let memoryConfig: AppConfig | null = null;
 
 export function getConfig(override?: Partial<AppConfig>): AppConfig {
-  if (override && Object.keys(override).length > 0) {
-    return { ...DEFAULT_CONFIG, ...(memoryConfig || {}), ...override };
-  }
+  let base = DEFAULT_CONFIG;
 
   if (memoryConfig) {
-    return memoryConfig;
-  }
-
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-      const parsed = JSON.parse(data);
-      const resolved: AppConfig = { ...DEFAULT_CONFIG, ...parsed };
-      memoryConfig = resolved;
-      return resolved;
+    base = memoryConfig;
+  } else {
+    try {
+      if (fs.existsSync(CONFIG_PATH)) {
+        const data = fs.readFileSync(CONFIG_PATH, 'utf8');
+        const parsed = JSON.parse(data);
+        const resolved: AppConfig = { ...DEFAULT_CONFIG, ...parsed };
+        memoryConfig = resolved;
+        base = resolved;
+      }
+    } catch {
+      // Readonly / serverless environment fallback
     }
-  } catch {
-    // Readonly / serverless environment fallback
   }
 
-  return DEFAULT_CONFIG;
+  if (override && Object.keys(override).length > 0) {
+    const merged = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      if (value !== undefined && value !== null && value !== '') {
+        (merged as any)[key] = value;
+      }
+    }
+    return merged;
+  }
+
+  return base;
 }
 
 export function saveConfig(config: Partial<AppConfig>): AppConfig {

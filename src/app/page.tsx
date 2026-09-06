@@ -132,23 +132,46 @@ export default function Home() {
   const logTerminalRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load config from localStorage on initial mount
+  // Load config from server & localStorage on initial mount
   useEffect(() => {
-    try {
-      const savedLocal = localStorage.getItem(STORAGE_KEY);
-      let initialConfig = config;
-      if (savedLocal) {
-        const parsed = JSON.parse(savedLocal);
-        initialConfig = { ...config, ...parsed };
-        setConfig(initialConfig);
-      }
-      fetchQuestions(initialConfig);
-      fetchAppliedHistory(initialConfig);
-    } catch {
-      fetchConfig();
-      fetchQuestions();
-      fetchAppliedHistory();
-    }
+    const initialize = async () => {
+      let activeConfig = config;
+
+      // 1. Fetch server config (has spreadsheetId & credentials if configured)
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          const serverCfg = data.config || data;
+          if (serverCfg && typeof serverCfg === 'object') {
+            activeConfig = { ...activeConfig, ...serverCfg };
+          }
+        }
+      } catch {}
+
+      // 2. Merge user's localStorage if available (without overwriting non-empty fields with empty ones)
+      try {
+        const savedLocal = localStorage.getItem(STORAGE_KEY);
+        if (savedLocal) {
+          const parsed = JSON.parse(savedLocal);
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v !== '' && v !== null && v !== undefined) {
+              (activeConfig as any)[k] = v;
+            }
+          }
+        }
+      } catch {}
+
+      setConfig(activeConfig);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(activeConfig));
+      } catch {}
+
+      fetchQuestions(activeConfig);
+      fetchAppliedHistory(activeConfig);
+    };
+
+    initialize();
 
     checkSetupBrowserStatus();
     const interval = setInterval(checkSetupBrowserStatus, 5000);
@@ -158,7 +181,9 @@ export default function Home() {
   // Save to localStorage on any config modification
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      if (config.spreadsheetId || config.googleCredentialsJson || config.searchKeywords) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      }
     } catch {}
   }, [config]);
 
