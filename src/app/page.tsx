@@ -321,6 +321,14 @@ export default function Home() {
         }
       } catch {}
 
+      // 3. Auto-migrate legacy 'Screening Questions' default to 'Sheet2'
+      if (!activeConfig.questionsSheetName || activeConfig.questionsSheetName === 'Screening Questions') {
+        activeConfig.questionsSheetName = 'Sheet2';
+      }
+      if (!activeConfig.sheetName) {
+        activeConfig.sheetName = 'Sheet1';
+      }
+
       setConfig(activeConfig);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(activeConfig));
