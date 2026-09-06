@@ -60,44 +60,46 @@ interface QuestionItem {
 
 const STORAGE_KEY = 'cv_blaster_config_v1';
 
+const EMPTY_CONFIG: AppConfig = {
+  spreadsheetId: '',
+  sheetName: 'Sheet1',
+  questionsSheetName: 'Screening Questions',
+  googleCredentialsJson: '',
+  searchKeywords: '',
+  location: '',
+  minSalary: '',
+  limitPerDay: 50,
+  limitMode: 'shared',
+  limitGlints: 20,
+  limitJobstreet: 20,
+  limitLinkedin: 20,
+  limitIndeed: 20,
+  enableGlints: true,
+  enableJobstreet: true,
+  enableLinkedin: true,
+  enableIndeed: true,
+  indeedNoJobTitleFilter: false,
+  debugTest: false,
+  concurrency: 2,
+  useSystemChrome: true,
+  customChromePath: '',
+  noticePeriod: 'Immediately',
+  fullName: '',
+  expectedSalary: 0,
+  educationLevel: 'Sarjana (S1)',
+  gpa: '',
+  yearsOfExperience: 0,
+  skills: '',
+  portfolioUrl: '',
+  githubUrl: '',
+  linkedinUrl: '',
+  phoneNumber: '',
+  domicile: '',
+};
+
 export default function Home() {
   // Config state
-  const [config, setConfig] = useState<AppConfig>({
-    spreadsheetId: '',
-    sheetName: 'Sheet1',
-    questionsSheetName: 'Screening Questions',
-    googleCredentialsJson: '',
-    searchKeywords: '',
-    location: '',
-    minSalary: '',
-    limitPerDay: 20,
-    limitMode: 'shared',
-    limitGlints: 80,
-    limitJobstreet: 75,
-    limitLinkedin: 50,
-    limitIndeed: 50,
-    enableGlints: true,
-    enableJobstreet: true,
-    enableLinkedin: true,
-    enableIndeed: true,
-    indeedNoJobTitleFilter: false,
-    debugTest: true,
-    concurrency: 3,
-    useSystemChrome: true,
-    customChromePath: '',
-    noticePeriod: 'Immediately',
-    fullName: 'Yoga Adi Saputra',
-    expectedSalary: 8000000,
-    educationLevel: 'Sarjana (S1)',
-    gpa: '3.75',
-    yearsOfExperience: 3,
-    skills: 'JavaScript, TypeScript, React, React.js, Next.js, Node.js, Express.js, Go, Golang, HTML, HTML5, CSS, CSS3, Tailwind CSS, PostgreSQL, MySQL, RESTful API, Docker, Git',
-    portfolioUrl: 'https://github.com/yogaadi',
-    githubUrl: 'https://github.com/yogaadi',
-    linkedinUrl: 'https://www.linkedin.com',
-    phoneNumber: '081234567890',
-    domicile: 'Jakarta Selatan, DKI Jakarta',
-  });
+  const [config, setConfig] = useState<AppConfig>(EMPTY_CONFIG);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'config' | 'profile' | 'questions' | 'logs' | 'history'>('config');
@@ -362,25 +364,7 @@ export default function Home() {
     }
     try {
       localStorage.removeItem(STORAGE_KEY);
-      const cleanConfig = {
-        ...DEFAULT_CONFIG,
-        spreadsheetId: '',
-        sheetName: 'Sheet1',
-        questionsSheetName: 'Screening Questions',
-        googleCredentialsJson: '',
-        searchKeywords: '',
-        location: '',
-        fullName: '',
-        skills: '',
-        phoneNumber: '',
-        portfolioUrl: '',
-        githubUrl: '',
-        linkedinUrl: '',
-        domicile: '',
-        expectedSalary: 0,
-        gpa: '',
-        yearsOfExperience: 0,
-      };
+      const cleanConfig: AppConfig = { ...EMPTY_CONFIG };
       setConfig(cleanConfig);
       await fetch('/api/config', {
         method: 'POST',
