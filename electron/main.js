@@ -79,12 +79,12 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
-  let loadUrl = 'http://127.0.0.1:3000';
+  let loadUrl = 'http://localhost:3000';
 
   if (isDev) {
     // In Dev mode with concurrently, Next dev server is already running
     const devPort = process.env.PORT || 3000;
-    loadUrl = `http://127.0.0.1:${devPort}`;
+    loadUrl = `http://localhost:${devPort}`;
   } else {
     // In Production packaged app, boot local server
     try {
