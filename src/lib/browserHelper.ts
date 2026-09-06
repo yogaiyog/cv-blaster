@@ -15,11 +15,8 @@ export function cleanupStaleProfileLocks(profilePath: string) {
   try {
     const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort'];
     for (const file of lockFiles) {
-      const fullPath = path.join(profilePath, file);
       try {
-        if (fs.existsSync(fullPath) || fs.lstatSync(fullPath).isSymbolicLink()) {
-          fs.unlinkSync(fullPath);
-        }
+        fs.unlinkSync(`${profilePath}/${file}`);
       } catch {}
     }
   } catch (e) {

@@ -1,6 +1,8 @@
 {
-  "name": "cv-blaster-tmp",
+  "name": "cv-blaster-desktop",
   "version": "0.1.0",
+  "description": "CV Blaster Automation Desktop Application",
+  "author": "Yoga Adi Saputra",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
