@@ -15,7 +15,7 @@ export function cleanupStaleProfileLocks(profilePath: string) {
   try {
     const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort'];
     for (const file of lockFiles) {
-      const fullPath = path.join(process.cwd(), 'automation-profile', file);
+      const fullPath = path.join(profilePath, file);
       try {
         if (fs.existsSync(fullPath) || fs.lstatSync(fullPath).isSymbolicLink()) {
           fs.unlinkSync(fullPath);
@@ -43,7 +43,8 @@ export async function launchBrowserWithFallback(
   } catch (e) {}
 
   const config = getConfig();
-  const profilePath = path.join(process.cwd(), 'automation-profile');
+  const baseDir = process.env.APP_USER_DATA || process.cwd();
+  const profilePath = path.join(baseDir, 'automation-profile');
   const isHeadless = mode !== 'headful';
 
   // Bersihkan stale singleton lock sebelum meluncurkan browser

@@ -39,7 +39,8 @@ export interface AppConfig {
   domicile: string;
 }
 
-const CONFIG_PATH = path.join(process.cwd(), 'config.json');
+const CONFIG_DIR = process.env.APP_USER_DATA || process.cwd();
+const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
 export const DEFAULT_CONFIG: AppConfig = {
   spreadsheetId: '',
@@ -119,6 +120,9 @@ export function saveConfig(config: Partial<AppConfig>): AppConfig {
   memoryConfig = updated;
 
   try {
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), 'utf8');
   } catch (error) {
     // In serverless / read-only environments, writing to disk fails silently while memoryConfig holds the state

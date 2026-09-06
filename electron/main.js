@@ -2,11 +2,19 @@ const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const net = require('net');
+const fs = require('fs');
 
 let mainWindow = null;
 let server = null;
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+
+// Ensure user data directory is created and accessible
+const userDataPath = app.getPath('userData');
+process.env.APP_USER_DATA = userDataPath;
+if (!fs.existsSync(userDataPath)) {
+  fs.mkdirSync(userDataPath, { recursive: true });
+}
 
 // Helper to find an available port
 function getFreePort(startPort = 3000) {
@@ -25,11 +33,16 @@ function getFreePort(startPort = 3000) {
 
 async function startNextServer() {
   const port = await getFreePort(3000);
-  const next = require('next');
   const appPath = isDev ? process.cwd() : path.join(process.resourcesPath, 'app');
 
+  // Change working directory to appPath so Next.js finds its build manifests
+  process.chdir(appPath);
+  process.env.NODE_ENV = isDev ? 'development' : 'production';
+  process.env.PORT = String(port);
+
+  const next = require('next');
   const nextApp = next({
-    dev: isDev,
+    dev: false, // In packaged app, always production
     dir: appPath,
     hostname: '127.0.0.1',
     port: port,
@@ -95,6 +108,10 @@ async function createWindow() {
       loadUrl = `http://127.0.0.1:${port}`;
     } catch (err) {
       console.error('[Electron] Failed to start Next server:', err);
+      const errHtml = `<html><body style="background:#0f172a;color:#f87171;font-family:sans-serif;padding:30px;"><h2>Gagal Memulai CV Blaster</h2><pre style="background:#1e293b;padding:16px;border-radius:8px;color:#e2e8f0;white-space:pre-wrap;">${err.stack || err.message}</pre></body></html>`;
+      await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errHtml)}`);
+      mainWindow.webContents.openDevTools();
+      return;
     }
   }
 
