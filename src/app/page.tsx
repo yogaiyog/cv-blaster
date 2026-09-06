@@ -256,6 +256,8 @@ export default function Home() {
   const [importMode, setImportMode] = useState<'text' | 'file'>('text');
   const [importError, setImportError] = useState<string | null>(null);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isSheetsTutorialOpen, setIsSheetsTutorialOpen] = useState(false);
+  const [activeTutorialStep, setActiveTutorialStep] = useState(1);
 
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateApplyOptions, setTemplateApplyOptions] = useState({
@@ -1140,7 +1142,15 @@ export default function Home() {
                     Digunakan untuk menyimpan log riwayat lamaran dan knowledge base pertanyaan kuisioner (tanpa butuh DB).
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/80 transition flex items-center gap-1.5 shadow-sm"
+                    title="Panduan lengkap langkah demi langkah setup Service Account & Google Sheets"
+                  >
+                    <span>📖</span> Tutorial Setup Sheets
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsTemplateModalOpen(true)}
@@ -1166,6 +1176,21 @@ export default function Home() {
                     📥 Import JSON
                   </button>
                 </div>
+              </div>
+
+              <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-lg flex items-center justify-between text-xs text-blue-300 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">💡</span>
+                  <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
+                  className="font-semibold text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
+                >
+                  <span>Buka Tutorial Langkah Demi Langkah</span>
+                  <span>→</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2205,6 +2230,302 @@ export default function Home() {
                   className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
                 >
                   Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: TUTORIAL SETUP GOOGLE SHEETS */}
+        {isSheetsTutorialOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span>📖</span> Tutorial Setup Google Sheets (Cloud Database)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Panduan 5 langkah mudah menghubungkan Google Spreadsheet untuk log lamaran &amp; bank soal kuesioner.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSheetsTutorialOpen(false)}
+                  className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1.5 rounded-md hover:bg-slate-800 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Stepper Navigation */}
+              <div className="px-6 py-3 bg-slate-900/80 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
+                {[
+                  { num: 1, title: '1. Aktifkan API', icon: '☁️' },
+                  { num: 2, title: '2. Service Account', icon: '🔑' },
+                  { num: 3, title: '3. Buat Sheets & Share', icon: '📊' },
+                  { num: 4, title: '4. Ambil ID', icon: '🆔' },
+                  { num: 5, title: '5. Setup Tab', icon: '📑' },
+                ].map((s) => (
+                  <button
+                    key={s.num}
+                    type="button"
+                    onClick={() => setActiveTutorialStep(s.num)}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
+                      activeTutorialStep === s.num
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    <span>{s.icon}</span>
+                    <span>{s.title}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Step Content */}
+              <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-300 leading-relaxed">
+                {activeTutorialStep === 1 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl">
+                      <h4 className="font-bold text-sm text-blue-300 mb-1 flex items-center gap-1.5">
+                        <span>☁️</span> Langkah 1: Buat Project &amp; Aktifkan Google Sheets API
+                      </h4>
+                      <p className="text-slate-300">
+                        Google Cloud Console adalah tempat membuat integrasi resmi gratis dengan Google Spreadsheet.
+                      </p>
+                    </div>
+
+                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
+                      <li>
+                        Buka{' '}
+                        <a
+                          href="https://console.cloud.google.com"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-400 hover:underline font-semibold"
+                        >
+                          Google Cloud Console (console.cloud.google.com) ↗
+                        </a>{' '}
+                        dan login dengan akun Google Anda.
+                      </li>
+                      <li>
+                        Klik dropdown project di kiri atas, lalu klik <strong>&quot;New Project&quot;</strong>.
+                      </li>
+                      <li>
+                        Beri nama project (misal: <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">cv-blaster-app</code>) lalu klik <strong>Create</strong>.
+                      </li>
+                      <li>
+                        Buka menu samping kiri ☰ → <strong>APIs &amp; Services</strong> → <strong>Library</strong>.
+                      </li>
+                      <li>
+                        Cari <strong>&quot;Google Sheets API&quot;</strong> pada kolom pencarian, klik hasil pencarian, lalu klik tombol biru <strong>&quot;Enable&quot;</strong>.
+                      </li>
+                    </ol>
+                  </div>
+                )}
+
+                {activeTutorialStep === 2 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl">
+                      <h4 className="font-bold text-sm text-emerald-300 mb-1 flex items-center gap-1.5">
+                        <span>🔑</span> Langkah 2: Buat Service Account &amp; Download credentials.json
+                      </h4>
+                      <p className="text-slate-300">
+                        Service Account berfungsi seperti &quot;robot email&quot; yang diberi izin untuk menulis data riwayat lamaran ke spreadsheet Anda.
+                      </p>
+                    </div>
+
+                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
+                      <li>
+                        Buka menu samping kiri ☰ → <strong>IAM &amp; Admin</strong> → <strong>Service Accounts</strong>.
+                      </li>
+                      <li>
+                        Klik tombol <strong>&quot;+ Create Service Account&quot;</strong> di bagian atas.
+                      </li>
+                      <li>
+                        Isi nama (misal: <code className="bg-slate-900 px-1 py-0.5 rounded text-emerald-300">cv-blaster-bot</code>), lalu klik <strong>Create and Continue</strong> → klik <strong>Done</strong>.
+                      </li>
+                      <li>
+                        Pada daftar service account, klik email service account yang baru saja dibuat.
+                      </li>
+                      <li>
+                        Buka tab <strong>&quot;Keys&quot;</strong> di bagian atas → klik <strong>&quot;Add Key&quot;</strong> → pilih <strong>&quot;Create new key&quot;</strong>.
+                      </li>
+                      <li>
+                        Pilih tipe key <strong>JSON</strong>, lalu klik <strong>Create</strong>. File <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">credentials.json</code> akan otomatis terunduh ke komputer Anda.
+                      </li>
+                      <li>
+                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> tersebut dengan TextEdit / Notepad / VSCode, <strong>copy seluruh teksnya</strong>, dan paste ke form <strong>Google Credentials JSON</strong> di CV Blaster.
+                      </li>
+                    </ol>
+                  </div>
+                )}
+
+                {activeTutorialStep === 3 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl">
+                      <h4 className="font-bold text-sm text-purple-300 mb-1 flex items-center gap-1.5">
+                        <span>📊</span> Langkah 3: Buat Google Spreadsheet Baru &amp; Share Akses
+                      </h4>
+                      <p className="text-slate-300">
+                        Spreadsheet Anda harus dibagikan ke email Service Account agar bot memiliki izin menulis log.
+                      </p>
+                    </div>
+
+                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
+                      <li>
+                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> yang Anda download di Langkah 2, cari baris <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">&quot;client_email&quot;</code>.
+                        <div className="mt-1.5 p-2 bg-slate-900 rounded font-mono text-[11px] text-slate-400">
+                          Contoh: <span className="text-emerald-400">cv-blaster-bot@project-123.iam.gserviceaccount.com</span>
+                        </div>
+                      </li>
+                      <li>
+                        Buka{' '}
+                        <a
+                          href="https://sheets.new"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-400 hover:underline font-semibold"
+                        >
+                          Google Sheets Baru (sheets.new) ↗
+                        </a>{' '}
+                        di browser Anda.
+                      </li>
+                      <li>
+                        Beri judul spreadsheet Anda (misal: <strong>Riwayat CV Blaster</strong>).
+                      </li>
+                      <li>
+                        Klik tombol <strong>&quot;Share&quot; (Bagikan)</strong> di pojok kanan atas spreadsheet.
+                      </li>
+                      <li>
+                        Paste alamat email Service Account (<code className="bg-slate-900 px-1 py-0.5 rounded text-emerald-400">client_email</code>) ke kolom sharing.
+                      </li>
+                      <li>
+                        Pastikan role akses dipilih <strong>&quot;Editor&quot;</strong>, hilangkan centang <em>Notify people</em>, lalu klik <strong>Send / Share</strong>.
+                      </li>
+                    </ol>
+                  </div>
+                )}
+
+                {activeTutorialStep === 4 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl">
+                      <h4 className="font-bold text-sm text-amber-300 mb-1 flex items-center gap-1.5">
+                        <span>🆔</span> Langkah 4: Ambil Google Spreadsheet ID
+                      </h4>
+                      <p className="text-slate-300">
+                        Spreadsheet ID adalah kode unik di URL browser Google Sheets Anda.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 text-slate-300">
+                      <p>1. Perhatikan URL Google Spreadsheet yang sedang Anda buka di browser:</p>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg font-mono text-[11px] break-all">
+                        https://docs.google.com/spreadsheets/d/<span className="bg-amber-500/20 text-amber-300 px-1 py-0.5 rounded font-bold border border-amber-500/40">1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms</span>/edit#gid=0
+                      </div>
+                      <p>
+                        2. Salin kode karakter acak di antara <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/d/</code> dan <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/edit</code> (yang disorot kuning di atas).
+                      </p>
+                      <p>
+                        3. Paste kode tersebut ke input <strong>Google Spreadsheet ID</strong> di tab Konfigurasi CV Blaster.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeTutorialStep === 5 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-indigo-950/40 border border-indigo-800/60 rounded-xl">
+                      <h4 className="font-bold text-sm text-indigo-300 mb-1 flex items-center gap-1.5">
+                        <span>📑</span> Langkah 5: Setup Nama Tab (Job Applied &amp; Question Bank)
+                      </h4>
+                      <p className="text-slate-300">
+                        CV Blaster menggunakan 2 tab sheet terpisah untuk menyimpan data secara rapi.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Tab 1: Log Lamaran */}
+                      <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-100 flex items-center gap-1">
+                            <span>📌</span> Tab 1: Log Riwayat Lamaran
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 font-mono">
+                            Default: Sheet1
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Menyimpan daftar perusahaan, posisi, platform, link loker, dan status lamaran yang sudah dikirim bot.
+                        </p>
+                        <div className="pt-1">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                            Header Kolom (Dibuat otomatis oleh bot):
+                          </span>
+                          <div className="p-2 bg-slate-950 rounded font-mono text-[10px] text-slate-300 break-all">
+                            Timestamp | Company | Job Title | Platform | Job URL | Status
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tab 2: Database Pertanyaan */}
+                      <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-100 flex items-center gap-1">
+                            <span>❓</span> Tab 2: Database Pertanyaan
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+                            Default: Screening Questions
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Menyimpan knowledge base kuesioner pertanyaan kualifikasi dan jawaban bot.
+                        </p>
+                        <div className="pt-1">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                            Header Kolom:
+                          </span>
+                          <div className="p-2 bg-slate-950 rounded font-mono text-[10px] text-slate-300 break-all">
+                            Question | Type | Options | Answer
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-emerald-400 mt-1">
+                          ✨ <em>Tips: Cukup klik tombol <strong>&quot;Migrasikan ke Google Sheets&quot;</strong> di Tab Database Pertanyaan untuk membuat &amp; mengisi tab ini secara instan!</em>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={activeTutorialStep === 1}
+                    onClick={() => setActiveTutorialStep(prev => Math.max(1, prev - 1))}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 font-medium transition"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <button
+                    type="button"
+                    disabled={activeTutorialStep === 5}
+                    onClick={() => setActiveTutorialStep(prev => Math.min(5, prev + 1))}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition"
+                  >
+                    Selanjutnya →
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSheetsTutorialOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
+                >
+                  Tutup Panduan
                 </button>
               </div>
             </div>
