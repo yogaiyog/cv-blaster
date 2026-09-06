@@ -114,11 +114,9 @@ export default function Home() {
     mode: 'headless' | 'headful';
   } | null>(null);
 
-  // Question CSV & Sheets state
+  // Question Sheets state
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [questionsSource, setQuestionsSource] = useState<'google_sheets' | 'local_csv'>('local_csv');
-  const [rawCsvText, setRawCsvText] = useState('');
-  const [csvViewMode, setCsvViewMode] = useState<'table' | 'raw'>('table');
   const [questionSearch, setQuestionSearch] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<QuestionItem | null>(null);
   const [isNewQuestionModalOpen, setIsNewQuestionModalOpen] = useState(false);
@@ -210,30 +208,9 @@ export default function Home() {
       if (data.success) {
         setQuestions(data.questions || []);
         if (data.source) setQuestionsSource(data.source);
-        if (data.rawCsv) setRawCsvText(data.rawCsv);
       }
     } catch (e) {
       console.error('Error loading questions', e);
-    }
-  };
-
-  const handleSaveRawCsv = async () => {
-    setCsvSaveStatus(null);
-    try {
-      const res = await fetch('/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_raw', rawCsv: rawCsvText, config }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCsvSaveStatus({ type: 'success', message: 'Daftar pertanyaan berhasil diperbarui!' });
-        fetchQuestions();
-      } else {
-        setCsvSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan pertanyaan' });
-      }
-    } catch (e: any) {
-      setCsvSaveStatus({ type: 'error', message: e.message || 'Gagal menyimpan pertanyaan' });
     }
   };
 
@@ -1351,7 +1328,7 @@ export default function Home() {
                       </span>
                     ) : (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Local / Default CSV
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Google Sheets Belum Terhubung
                       </span>
                     )}
                   </div>
@@ -1361,27 +1338,6 @@ export default function Home() {
                 </div>
 
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  {/* View Mode Toggle */}
-                  <div className="bg-slate-900 border border-slate-800 rounded p-0.5 flex text-xs">
-                    <button
-                      onClick={() => setCsvViewMode('table')}
-                      className={`px-3 py-1.5 rounded transition font-medium ${
-                        csvViewMode === 'table' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      📊 Tabel Visual
-                    </button>
-                    <button
-                      onClick={() => setCsvViewMode('raw')}
-                      className={`px-3 py-1.5 rounded transition font-medium ${
-                        csvViewMode === 'raw' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      📝 Editor Mentah (CSV)
-                    </button>
-                  </div>
-
-
                   {/* Add New Question Button */}
                   <button
                     onClick={() => setIsNewQuestionModalOpen(true)}
@@ -1413,9 +1369,8 @@ export default function Home() {
                 </div>
               )}
 
-              {/* VIEW MODE 1: VISUAL TABLE */}
-              {csvViewMode === 'table' && (
-                <div className="space-y-4">
+              {/* VISUAL TABLE */}
+              <div className="space-y-4">
                   {/* Search bar */}
                   <div className="flex items-center gap-2">
                     <input
@@ -1467,7 +1422,7 @@ export default function Home() {
                                 <td colSpan={6} className="p-8 text-center text-slate-500 italic">
                                   {questionSearch
                                     ? `Tidak ditemukan pertanyaan yang cocok dengan "${questionSearch}".`
-                                    : 'Belum ada pertanyaan di database CSV.'}
+                                    : 'Belum ada pertanyaan di database Google Sheets.'}
                                 </td>
                               </tr>
                             );
@@ -1523,35 +1478,6 @@ export default function Home() {
                     </table>
                   </div>
                 </div>
-              )}
-
-              {/* VIEW MODE 2: RAW TEXTAREA EDITOR */}
-              {csvViewMode === 'raw' && (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center text-xs text-slate-400">
-                    <span>Edit teks CSV langsung. Format: <code>Question,Type,Options,Answer</code></span>
-                    <button
-                      onClick={() => fetchQuestions()}
-                      className="text-slate-400 hover:text-slate-200 underline transition"
-                    >
-                      🔄 Reload dari file
-                    </button>
-                  </div>
-                  <textarea
-                    rows={18}
-                    value={rawCsvText}
-                    onChange={(e) => setRawCsvText(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded p-4 font-mono text-xs text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed scrollbar-thin scrollbar-thumb-slate-800"
-                    placeholder="Question,Type,Options,Answer..."
-                  />
-                  <button
-                    onClick={handleSaveRawCsv}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded transition text-sm flex items-center gap-2"
-                  >
-                    💾 Simpan Perubahan CSV Mentah
-                  </button>
-                </div>
-              )}
 
               {/* MODAL: TAMBAH PERTANYAAN BARU */}
               {isNewQuestionModalOpen && (
@@ -1634,7 +1560,7 @@ export default function Home() {
                           type="submit"
                           className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
                         >
-                          Simpan ke CSV
+                          Simpan Pertanyaan
                         </button>
                       </div>
                     </form>
