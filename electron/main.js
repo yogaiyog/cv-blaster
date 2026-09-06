@@ -75,7 +75,7 @@ async function createWindow() {
     title: 'CV Blaster - Auto Apply Bot',
     icon: path.join(__dirname, 'assets/icon.png'),
     backgroundColor: '#0f172a', // Slate-900 background
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
