@@ -43,6 +43,8 @@ next-env.d.ts
 # local bot configurations & automation profile
 /automation-profile/
 config.json
+config_backup.json
+config*.json
 
 # electron build outputs
 /dist-electron/
