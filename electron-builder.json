@@ -21,6 +21,7 @@
   ],
   "mac": {
     "category": "public.app-category.productivity",
+    "icon": "electron/assets/icon.icns",
     "target": [
       {
         "target": "dmg",
@@ -31,6 +32,7 @@
     "gatekeeperAssess": false
   },
   "win": {
+    "icon": "electron/assets/icon.png",
     "target": [
       {
         "target": "nsis",
