@@ -1162,6 +1162,21 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-lg flex items-center justify-between text-xs text-blue-300 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">💡</span>
+                  <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
+                  className="font-semibold text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
+                >
+                  <span>Buka Tutorial Langkah Demi Langkah</span>
+                  <span>→</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
@@ -1205,9 +1220,19 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Google Credentials JSON (Service Account)
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Google Credentials JSON (Service Account)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(2); }}
+                    className="text-xs text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
+                  >
+                    <span>Cara dapat file JSON ini?</span>
+                    <span>→</span>
+                  </button>
+                </div>
                 <textarea
                   rows={6}
                   required
