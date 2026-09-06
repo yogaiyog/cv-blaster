@@ -37,6 +37,7 @@ export interface AppConfig {
   linkedinUrl: string;
   phoneNumber: string;
   domicile: string;
+  geminiApiKey?: string;
 }
 
 const CONFIG_DIR = process.env.APP_USER_DATA || process.cwd();
@@ -47,6 +48,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   sheetName: 'Sheet1',
   questionsSheetName: 'Screening Questions',
   googleCredentialsJson: '',
+  geminiApiKey: '',
   searchKeywords: '',
   location: '',
   minSalary: '',

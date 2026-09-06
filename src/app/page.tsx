@@ -38,6 +38,7 @@ interface AppConfig {
   linkedinUrl?: string;
   phoneNumber?: string;
   domicile?: string;
+  geminiApiKey?: string;
 }
 
 interface AppliedJob {
@@ -65,6 +66,7 @@ const EMPTY_CONFIG: AppConfig = {
   sheetName: 'Sheet1',
   questionsSheetName: 'Screening Questions',
   googleCredentialsJson: '',
+  geminiApiKey: '',
   searchKeywords: '',
   location: '',
   minSalary: '',
@@ -253,6 +255,7 @@ export default function Home() {
   const [importJsonText, setImportJsonText] = useState('');
   const [importMode, setImportMode] = useState<'text' | 'file'>('text');
   const [importError, setImportError] = useState<string | null>(null);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateApplyOptions, setTemplateApplyOptions] = useState({
@@ -1075,6 +1078,57 @@ export default function Home() {
                     ⚠️ Bot akan selalu dijalankan menggunakan engine Chromium bawaan Puppeteer.
                   </p>
                 )}
+              </div>
+
+              {/* Integrasi Google Gemini AI */}
+              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <span>✨</span> Google Gemini AI (Smart Question Answering)
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Digunakan bot untuk menjawab pertanyaan kuesioner lowongan yang belum ada di database secara otomatis &amp; cerdas.
+                    </p>
+                  </div>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium underline flex items-center gap-1 self-start sm:self-auto"
+                  >
+                    <span>Dapatkan API Key Gratis</span>
+                    <span>↗</span>
+                  </a>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Gemini API Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showGeminiKey ? 'text' : 'password'}
+                      placeholder="AIzaSy..."
+                      value={config.geminiApiKey || ''}
+                      onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 pr-28 text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500 tracking-wider"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGeminiKey(!showGeminiKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 font-medium"
+                    >
+                      <span>{showGeminiKey ? '🙈 Sembunyikan' : '👁️ Tampilkan'}</span>
+                    </button>
+                  </div>
+                  <div className="flex items-start gap-2 text-[11px] text-slate-500 mt-2">
+                    <span className="text-blue-400 font-bold">ℹ️</span>
+                    <span>
+                      Key disimpan secara lokal di komputer Anda. Anda bisa membuat Gemini API Key gratis tanpa kartu kredit di Google AI Studio.
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-between items-center border-b border-slate-800 pb-2 pt-4 flex-wrap gap-2">

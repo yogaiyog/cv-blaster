@@ -594,7 +594,12 @@ function tryRegexAnswer(
 // 5. LLM fallback for anything regex couldn't classify
 // ---------------------------------------------------------------------------
 
-const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+function getGeminiAi(customConfig?: AppConfig): GoogleGenerativeAI | null {
+  const cfg = customConfig || getConfig();
+  const apiKey = (cfg.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return null;
+  return new GoogleGenerativeAI(apiKey);
+}
 
 async function askLLM(
   question: string,
@@ -621,8 +626,9 @@ Question: "${question}"
 Reply with a concise, highly professional, direct answer (1-2 sentences maximum, or just the number/fact if it's a simple factual question). Reply in the same language as the question (Indonesian or English).`;
 
     try {
-      if (process.env.GEMINI_API_KEY) {
-        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const aiInstance = getGeminiAi(customConfig);
+      if (aiInstance) {
+        const model = aiInstance.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent(prompt);
         const text = (result.response.text() || "").trim();
         if (text) return [text];
@@ -668,8 +674,9 @@ Allowed options (copy chosen ones verbatim): ${options.map((o) => `"${o}"`).join
 Reply with ONLY the chosen option(s), copied exactly from the list. If choosing multiple, separate them with " || ". Nothing else.`;
 
   try {
-    if (process.env.GEMINI_API_KEY) {
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const aiInstance = getGeminiAi(customConfig);
+    if (aiInstance) {
+      const model = aiInstance.getGenerativeModel({ model: "gemini-1.5-flash" });
       const result = await model.generateContent(prompt);
       const text = (result.response.text() || "").trim();
 

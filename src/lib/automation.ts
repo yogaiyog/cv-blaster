@@ -26,10 +26,12 @@ export async function startBot(
   try {
     const config = customConfig || getConfig();
 
-    // Verify GEMINI_API_KEY is set in environment or .env
-    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.trim() === '') {
-      throw new Error('GEMINI_API_KEY is missing in your .env file. Please configure it and restart the server.');
+    // Verify GEMINI_API_KEY is set in config or environment
+    const geminiApiKey = (config.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+    if (!geminiApiKey) {
+      throw new Error('Gemini API Key belum diisi. Silakan masukkan Gemini API Key Anda pada tab Konfigurasi.');
     }
+    process.env.GEMINI_API_KEY = geminiApiKey;
 
     if (!config.searchKeywords && !config.indeedNoJobTitleFilter) {
       throw new Error('Search keywords are not configured. Please fill them in first.');
