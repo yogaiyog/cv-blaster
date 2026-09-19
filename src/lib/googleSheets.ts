@@ -299,6 +299,260 @@ export function cleanJobUrl(url: string): string {
   }
 }
 
+let inMemoryKnownDropdownStatuses: Set<string> | null = null;
+
+export async function ensureStatusDropdownOptions(
+  newStatuses: string[],
+  customConfig?: AppConfig
+): Promise<void> {
+  const config = customConfig || getConfig();
+  if (!config.spreadsheetId || !config.googleCredentialsJson || !newStatuses || newStatuses.length === 0) {
+    return;
+  }
+
+  const candidateStatuses = Array.from(
+    new Set(newStatuses.map((s) => (s || '').trim()).filter(Boolean))
+  );
+  if (candidateStatuses.length === 0) return;
+
+  // Jika semua status sudah tercatat di cache memory, lewati panggilan network
+  if (
+    inMemoryKnownDropdownStatuses &&
+    candidateStatuses.every((s) => inMemoryKnownDropdownStatuses!.has(s.toLowerCase()))
+  ) {
+    return;
+  }
+
+  try {
+    const sheets = getSheetsClient(config);
+    const sheetTab = config.sheetName || 'Sheet1';
+
+    const res = await executeWithRetry(async () => {
+      return await sheets.spreadsheets.get({
+        spreadsheetId: config.spreadsheetId,
+        ranges: [`${sheetTab}!F1:F10`],
+        fields: 'sheets(properties(sheetId,title),data(rowData(values(dataValidation))))',
+      });
+    }, 'Check Status Column Data Validation');
+
+    const targetSheet =
+      res.data.sheets?.find((s: any) => s.properties?.title === sheetTab) ||
+      res.data.sheets?.[0];
+    if (!targetSheet || targetSheet.properties?.sheetId === undefined) {
+      return;
+    }
+
+    const sheetId = targetSheet.properties.sheetId;
+    let existingValidation: any = null;
+    const rowData = targetSheet.data?.[0]?.rowData || [];
+
+    for (const r of rowData) {
+      const dv = r.values?.[0]?.dataValidation;
+      if (dv && dv.condition?.type === 'ONE_OF_LIST') {
+        existingValidation = dv;
+        break;
+      }
+    }
+
+    if (existingValidation && Array.isArray(existingValidation.condition?.values)) {
+      const existingValues: string[] = existingValidation.condition.values
+        .map((v: any) => v.userEnteredValue || '')
+        .filter(Boolean);
+
+      if (!inMemoryKnownDropdownStatuses) {
+        inMemoryKnownDropdownStatuses = new Set(existingValues.map((v) => v.toLowerCase()));
+      } else {
+        existingValues.forEach((v) => inMemoryKnownDropdownStatuses!.add(v.toLowerCase()));
+      }
+
+      const mergedList = [...existingValues];
+      let hasNewOption = false;
+
+      for (const st of candidateStatuses) {
+        if (!inMemoryKnownDropdownStatuses.has(st.toLowerCase())) {
+          mergedList.push(st);
+          inMemoryKnownDropdownStatuses.add(st.toLowerCase());
+          hasNewOption = true;
+        }
+      }
+
+      if (hasNewOption) {
+        console.log(`[Google Sheets] Menambahkan opsi baru ke dropdown Kolom F:`, candidateStatuses);
+        await enqueueSheetsWrite(async () => {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: config.spreadsheetId,
+            requestBody: {
+              requests: [
+                {
+                  setDataValidation: {
+                    range: {
+                      sheetId: sheetId,
+                      startRowIndex: 1, // Baris 2 ke bawah
+                      startColumnIndex: 5, // Kolom F (0-indexed)
+                      endColumnIndex: 6,
+                    },
+                    rule: {
+                      condition: {
+                        type: 'ONE_OF_LIST',
+                        values: mergedList.map((v) => ({ userEnteredValue: v })),
+                      },
+                      strict: false, // Cegah invalid input warning
+                      showCustomUi: true,
+                    },
+                  },
+                },
+              ],
+            },
+          });
+        }, `Update Status Dropdown Validation (+${candidateStatuses.join(', ')})`);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Gagal memeriksa/menyesuaikan dropdown status Google Sheets:', err.message || err);
+  }
+}
+
+let inMemoryFormattingInitialized = false;
+
+export const STATUS_COLOR_DEFINITIONS = [
+  {
+    pattern: 'Tidak Sesuai',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.98, green: 0.85, blue: 0.85 },
+    fg: { red: 0.72, green: 0.11, blue: 0.11 },
+    bold: true,
+  },
+  {
+    pattern: 'Dalam Review',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 1.0, green: 0.94, blue: 0.80 },
+    fg: { red: 0.60, green: 0.40, blue: 0.02 },
+    bold: true,
+  },
+  {
+    pattern: 'Wawancara',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 1.0, green: 0.89, blue: 0.78 },
+    fg: { red: 0.75, green: 0.32, blue: 0.05 },
+    bold: true,
+  },
+  {
+    pattern: 'oncall',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 1.0, green: 0.89, blue: 0.78 },
+    fg: { red: 0.75, green: 0.32, blue: 0.05 },
+    bold: true,
+  },
+  {
+    pattern: 'Test',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.92, green: 0.88, blue: 0.98 },
+    fg: { red: 0.35, green: 0.15, blue: 0.65 },
+    bold: true,
+  },
+  {
+    pattern: 'psikotes',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.92, green: 0.88, blue: 0.98 },
+    fg: { red: 0.35, green: 0.15, blue: 0.65 },
+    bold: true,
+  },
+  {
+    pattern: 'Dilamar',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.84, green: 0.92, blue: 1.0 },
+    fg: { red: 0.08, green: 0.35, blue: 0.75 },
+    bold: true,
+  },
+  {
+    pattern: 'Applied',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.85, green: 0.95, blue: 0.88 },
+    fg: { red: 0.08, green: 0.45, blue: 0.20 },
+    bold: true,
+  },
+  {
+    pattern: 'Dry-run',
+    conditionType: 'TEXT_CONTAINS',
+    bg: { red: 0.92, green: 0.93, blue: 0.95 },
+    fg: { red: 0.38, green: 0.42, blue: 0.46 },
+    bold: false,
+  },
+];
+
+export async function ensureStatusConditionalFormatting(customConfig?: AppConfig): Promise<void> {
+  if (inMemoryFormattingInitialized) return;
+  const config = customConfig || getConfig();
+  if (!config.spreadsheetId || !config.googleCredentialsJson) return;
+
+  try {
+    const sheets = getSheetsClient(config);
+    const sheetTab = config.sheetName || 'Sheet1';
+
+    const meta = await executeWithRetry(async () => {
+      return await sheets.spreadsheets.get({
+        spreadsheetId: config.spreadsheetId,
+        fields: 'sheets(properties(sheetId,title),conditionalFormats)',
+      });
+    }, 'Check Conditional Formatting');
+
+    const targetSheet =
+      meta.data.sheets?.find((s: any) => s.properties?.title === sheetTab) ||
+      meta.data.sheets?.[0];
+    if (!targetSheet || targetSheet.properties?.sheetId === undefined) return;
+
+    const sheetId = targetSheet.properties.sheetId;
+    const existingRules = targetSheet.conditionalFormats || [];
+
+    const hasStatusFormatting = existingRules.some((rule: any) => {
+      const ranges = rule.booleanRule?.ranges || [];
+      return ranges.some((r: any) => r.startColumnIndex === 5 && r.endColumnIndex === 6);
+    });
+
+    if (!hasStatusFormatting) {
+      const requests = STATUS_COLOR_DEFINITIONS.map((def, idx) => ({
+        addConditionalFormatRule: {
+          rule: {
+            ranges: [
+              {
+                sheetId: sheetId,
+                startRowIndex: 1,
+                startColumnIndex: 5,
+                endColumnIndex: 6,
+              },
+            ],
+            booleanRule: {
+              condition: {
+                type: def.conditionType,
+                values: [{ userEnteredValue: def.pattern }],
+              },
+              format: {
+                backgroundColor: def.bg,
+                textFormat: {
+                  foregroundColor: def.fg,
+                  bold: def.bold,
+                },
+              },
+            },
+          },
+          index: idx,
+        },
+      }));
+
+      await enqueueSheetsWrite(async () => {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: config.spreadsheetId,
+          requestBody: { requests },
+        });
+      }, 'Apply Status Conditional Formatting Rules');
+    }
+
+    inMemoryFormattingInitialized = true;
+  } catch (err: any) {
+    console.warn('Gagal mengatur conditional formatting status:', err.message || err);
+  }
+}
+
 export async function addAppliedJob(
   job: { company: string; title: string; platform: string; jobUrl: string; status: string },
   customConfig?: AppConfig
@@ -321,6 +575,11 @@ export async function addAppliedJob(
   }
 
   if (!config.googleCredentialsJson || !config.spreadsheetId) return;
+
+  // Pastikan status terdaftar di dropdown kolom F jika ada aturan validasi
+  if (job.status) {
+    ensureStatusDropdownOptions([job.status], config).catch(() => {});
+  }
 
   // Enqueue write to serialized queue with automatic rate-limit backoff retry
   enqueueSheetsWrite(async () => {
@@ -356,6 +615,329 @@ export async function isJobAlreadyApplied(jobUrl: string, customConfig?: AppConf
   return appliedJobs.some((job) => cleanJobUrl(job.jobUrl) === targetUrl);
 }
 
+export interface GlintsSyncResult {
+  totalScraped: number;
+  totalGlintsInSheet: number;
+  matchedCount: number;
+  updatedCount: number;
+  details: Array<{
+    company: string;
+    title: string;
+    oldStatus: string;
+    newStatus: string;
+    rowNumber: number;
+  }>;
+}
+
+function cleanStringForMatching(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/^pt\b|\bpt\b|^cv\b|\bcv\b/gi, '')
+    .replace(/[^\w\s]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function updateGlintsApplicationStatuses(
+  glintsApps: Array<{
+    company: string;
+    title: string;
+    status: string;
+    jobId?: string;
+    applicationId?: string;
+    actionDate?: string;
+    closedReason?: string;
+  }>,
+  customConfig?: AppConfig
+): Promise<GlintsSyncResult> {
+  const config = customConfig || getConfig();
+  if (!config.spreadsheetId || !config.googleCredentialsJson) {
+    throw new Error('Google Sheets belum dikonfigurasi (Credentials JSON atau Spreadsheet ID kosong).');
+  }
+
+  const sheets = getSheetsClient(config);
+  const sheetTab = config.sheetName || 'Sheet1';
+
+  // Pastikan opsi status dari Glints sudah terdaftar di dropdown Kolom F Google Sheets
+  const candidateStatuses = Array.from(new Set(glintsApps.map((a) => a.status).filter(Boolean)));
+  if (candidateStatuses.length > 0) {
+    await ensureStatusDropdownOptions(candidateStatuses, config).catch(() => {});
+  }
+
+  // 1. Ambil data baris saat ini dari Google Sheets
+  const response = await executeWithRetry(async () => {
+    return await sheets.spreadsheets.values.get({
+      spreadsheetId: config.spreadsheetId,
+      range: `${sheetTab}!A2:F`,
+    });
+  }, 'Get Current Applied Jobs for Status Sync');
+
+  const rows = response.data.values || [];
+  let totalGlintsInSheet = 0;
+  let matchedCount = 0;
+  const updates: Array<{
+    rowNumber: number;
+    company: string;
+    title: string;
+    oldStatus: string;
+    newStatus: string;
+  }> = [];
+
+  // Index baris Google Sheets (i: 0 => baris 2 di sheet)
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const sheetCompany = (row[0] || '').trim();
+    const sheetTitle = (row[1] || '').trim();
+    const sheetPlatform = (row[2] || '').trim();
+    const sheetJobUrl = (row[3] || '').trim();
+    const sheetStatus = (row[5] || '').trim();
+
+    if (!sheetPlatform.toLowerCase().includes('glints')) {
+      continue;
+    }
+    totalGlintsInSheet++;
+
+    const normSheetCompany = cleanStringForMatching(sheetCompany);
+    const normSheetTitle = cleanStringForMatching(sheetTitle);
+
+    // Cari kartu lamaran Glints yang cocok
+    const matchedApp = glintsApps.find((app) => {
+      // 1. Cocokkan via Job ID jika ada di URL
+      if (app.jobId && sheetJobUrl.includes(app.jobId)) {
+        return true;
+      }
+      // 2. Cocokkan via kesamaan nama perusahaan & posisi yang sudah dinormalisasi
+      const normAppComp = cleanStringForMatching(app.company);
+      const normAppTitle = cleanStringForMatching(app.title);
+
+      if (normSheetCompany && normAppComp) {
+        const companyMatch =
+          normSheetCompany === normAppComp ||
+          normSheetCompany.includes(normAppComp) ||
+          normAppComp.includes(normSheetCompany);
+
+        if (companyMatch && normSheetTitle && normAppTitle) {
+          const titleMatch =
+            normSheetTitle === normAppTitle ||
+            normSheetTitle.includes(normAppTitle) ||
+            normAppTitle.includes(normSheetTitle);
+
+          if (titleMatch) return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchedApp) {
+      matchedCount++;
+      const currentNormStatus = sheetStatus.toLowerCase().trim();
+      const newNormStatus = matchedApp.status.toLowerCase().trim();
+
+      // Cek apakah status berubah
+      if (currentNormStatus !== newNormStatus && matchedApp.status) {
+        updates.push({
+          rowNumber: i + 2,
+          company: sheetCompany,
+          title: sheetTitle,
+          oldStatus: sheetStatus,
+          newStatus: matchedApp.status,
+        });
+      }
+    }
+  }
+
+  // 2. Jika ada update status, lakukan batchUpdate ke Google Sheets
+  if (updates.length > 0) {
+    await enqueueSheetsWrite(async () => {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: config.spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updates.map((u) => ({
+            range: `${sheetTab}!F${u.rowNumber}`,
+            values: [[u.newStatus]],
+          })),
+        },
+      });
+    }, `Batch Update ${updates.length} Glints Application Statuses`);
+
+    // 3. Perbarui cache in-memory secara instan
+    if (inMemoryAppliedJobs) {
+      for (const u of updates) {
+        const cached = inMemoryAppliedJobs.data.find(
+          (j) =>
+            j.platform.toLowerCase().includes('glints') &&
+            cleanStringForMatching(j.company) === cleanStringForMatching(u.company) &&
+            cleanStringForMatching(j.title) === cleanStringForMatching(u.title)
+        );
+        if (cached) {
+          cached.status = u.newStatus;
+        }
+      }
+    }
+  }
+
+  return {
+    totalScraped: glintsApps.length,
+    totalGlintsInSheet,
+    matchedCount,
+    updatedCount: updates.length,
+    details: updates,
+  };
+}
+
+export interface JobstreetSyncResult {
+  totalScraped: number;
+  totalJobstreetInSheet: number;
+  matchedCount: number;
+  updatedCount: number;
+  details: Array<{
+    company: string;
+    title: string;
+    oldStatus: string;
+    newStatus: string;
+    rowNumber: number;
+  }>;
+}
+
+export async function updateJobstreetApplicationStatuses(
+  jobstreetApps: Array<{
+    company: string;
+    title: string;
+    status: string;
+    location?: string;
+    actionDate?: string;
+  }>,
+  customConfig?: AppConfig
+): Promise<JobstreetSyncResult> {
+  const config = customConfig || getConfig();
+  if (!config.spreadsheetId || !config.googleCredentialsJson) {
+    throw new Error('Google Sheets belum dikonfigurasi (Credentials JSON atau Spreadsheet ID kosong).');
+  }
+
+  const sheets = getSheetsClient(config);
+  const sheetTab = config.sheetName || 'Sheet1';
+
+  // Pastikan opsi status dari Jobstreet sudah terdaftar di dropdown Kolom F Google Sheets
+  const candidateStatuses = Array.from(new Set(jobstreetApps.map((a) => a.status).filter(Boolean)));
+  if (candidateStatuses.length > 0) {
+    await ensureStatusDropdownOptions(candidateStatuses, config).catch(() => {});
+  }
+
+  // 1. Ambil data baris saat ini dari Google Sheets
+  const response = await executeWithRetry(async () => {
+    return await sheets.spreadsheets.values.get({
+      spreadsheetId: config.spreadsheetId,
+      range: `${sheetTab}!A2:F`,
+    });
+  }, 'Get Current Applied Jobs for Jobstreet Status Sync');
+
+  const rows = response.data.values || [];
+  let totalJobstreetInSheet = 0;
+  let matchedCount = 0;
+  const updates: Array<{
+    rowNumber: number;
+    company: string;
+    title: string;
+    oldStatus: string;
+    newStatus: string;
+  }> = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const sheetCompany = (row[0] || '').trim();
+    const sheetTitle = (row[1] || '').trim();
+    const sheetPlatform = (row[2] || '').trim();
+    const sheetJobUrl = (row[3] || '').trim();
+    const sheetStatus = (row[5] || '').trim();
+
+    if (!sheetPlatform.toLowerCase().includes('jobstreet')) {
+      continue;
+    }
+    totalJobstreetInSheet++;
+
+    const normSheetCompany = cleanStringForMatching(sheetCompany);
+    const normSheetTitle = cleanStringForMatching(sheetTitle);
+
+    const matchedApp = jobstreetApps.find((app) => {
+      const normAppComp = cleanStringForMatching(app.company);
+      const normAppTitle = cleanStringForMatching(app.title);
+
+      if (normSheetCompany && normAppComp) {
+        const companyMatch =
+          normSheetCompany === normAppComp ||
+          normSheetCompany.includes(normAppComp) ||
+          normAppComp.includes(normSheetCompany);
+
+        if (companyMatch && normSheetTitle && normAppTitle) {
+          const titleMatch =
+            normSheetTitle === normAppTitle ||
+            normSheetTitle.includes(normAppTitle) ||
+            normAppTitle.includes(normSheetTitle);
+
+          if (titleMatch) return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchedApp) {
+      matchedCount++;
+      const currentNormStatus = sheetStatus.toLowerCase().trim();
+      const newNormStatus = matchedApp.status.toLowerCase().trim();
+
+      if (currentNormStatus !== newNormStatus && matchedApp.status) {
+        updates.push({
+          rowNumber: i + 2,
+          company: sheetCompany,
+          title: sheetTitle,
+          oldStatus: sheetStatus,
+          newStatus: matchedApp.status,
+        });
+      }
+    }
+  }
+
+  // 2. Lakukan batchUpdate ke Google Sheets jika ada update status
+  if (updates.length > 0) {
+    await enqueueSheetsWrite(async () => {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: config.spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updates.map((u) => ({
+            range: `${sheetTab}!F${u.rowNumber}`,
+            values: [[u.newStatus]],
+          })),
+        },
+      });
+    }, `Batch Update ${updates.length} Jobstreet Application Statuses`);
+
+    // 3. Perbarui cache in-memory
+    if (inMemoryAppliedJobs) {
+      for (const u of updates) {
+        const cached = inMemoryAppliedJobs.data.find(
+          (j) =>
+            j.platform.toLowerCase().includes('jobstreet') &&
+            cleanStringForMatching(j.company) === cleanStringForMatching(u.company) &&
+            cleanStringForMatching(j.title) === cleanStringForMatching(u.title)
+        );
+        if (cached) {
+          cached.status = u.newStatus;
+        }
+      }
+    }
+  }
+
+  return {
+    totalScraped: jobstreetApps.length,
+    totalJobstreetInSheet,
+    matchedCount,
+    updatedCount: updates.length,
+    details: updates,
+  };
+}
+
 export async function initializeSheet(customConfig?: AppConfig) {
   const config = customConfig || getConfig();
   if (!config.googleCredentialsJson || !config.spreadsheetId) return;
@@ -376,6 +958,7 @@ export async function initializeSheet(customConfig?: AppConfig) {
       });
     }, `Initialize Sheet Tab "${sheetTab}"`);
     markTabInitialized(config.spreadsheetId, sheetTab);
+    await ensureStatusConditionalFormatting(config).catch(() => {});
   } catch (error) {
     console.error('Failed to initialize Google Sheet headers:', error);
   }

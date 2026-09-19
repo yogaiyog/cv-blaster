@@ -20,6 +20,8 @@ interface AppConfig {
   enableJobstreet: boolean;
   enableLinkedin?: boolean;
   enableIndeed?: boolean;
+  syncGlintsStatus?: boolean;
+  syncJobstreetStatus?: boolean;
   indeedNoJobTitleFilter?: boolean;
   debugTest: boolean;
   concurrency: number;
@@ -80,6 +82,8 @@ const EMPTY_CONFIG: AppConfig = {
   enableJobstreet: true,
   enableLinkedin: true,
   enableIndeed: true,
+  syncGlintsStatus: false,
+  syncJobstreetStatus: false,
   indeedNoJobTitleFilter: false,
   debugTest: false,
   concurrency: 2,
@@ -696,7 +700,7 @@ export default function Home() {
                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
             }`}
           >
-            {isSetupBrowserRunning ? '🛑 Tutup Browser Setup' : '🔑 Buka Browser (Login Setup)'}
+            {isSetupBrowserRunning ? 'Tutup Browser Setup' : 'Buka Browser (Login Setup)'}
           </button>
 
           {/* Bot Control Button */}
@@ -718,7 +722,7 @@ export default function Home() {
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 }`}
               >
-                🚀 Jalankan (Headless)
+                Jalankan (Headless)
               </button>
               <button
                 onClick={() => handleStartBot('headful')}
@@ -729,7 +733,7 @@ export default function Home() {
                     : 'bg-teal-600 hover:bg-teal-700 text-white'
                 }`}
               >
-                👁️ Jalankan (Headful)
+                Jalankan (Headful)
               </button>
             </div>
           )}
@@ -748,7 +752,7 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            ⚙️ Konfigurasi Bot
+            Konfigurasi
           </button>
           <button
             onClick={() => setActiveTab('profile')}
@@ -758,7 +762,7 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            👤 Profil Pelamar
+            Profil Pelamar
           </button>
           <button
             onClick={() => {
@@ -771,7 +775,7 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            📋 Database Pertanyaan (Google Sheets)
+            Database Pertanyaan
             {config.googleCredentialsJson && config.spreadsheetId && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
                 Cloud Sync
@@ -786,7 +790,7 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            📟 Live Logs
+            Live Logs
             {isBotRunning && (
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -805,7 +809,7 @@ export default function Home() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            📊 Riwayat Lamaran
+            Riwayat Lamaran
           </button>
         </div>
 
@@ -815,7 +819,7 @@ export default function Home() {
           {activeTab === 'config' && (
             <form onSubmit={handleSaveConfig} className="space-y-6">
               <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
-                Pilihan Platform (Toggles)
+                Pilihan Platform
               </h2>
               <div className="flex gap-6 items-center py-2 flex-wrap">
                 <label className="flex items-center gap-2.5 cursor-pointer">
@@ -865,13 +869,40 @@ export default function Home() {
                     onChange={(e) => setConfig({ ...config, debugTest: e.target.checked })}
                     className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500"
                   />
-                  <span className="text-sm font-medium text-amber-400 font-bold">Debug Mode (Simulasi / Tanpa Submit)</span>
+                  <span className="text-sm font-medium text-amber-400 font-semibold">Debug Mode (Simulasi / Tanpa Submit)</span>
                 </label>
+              </div>
+
+              {/* Update Status Lamaran */}
+              <div>
+                <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
+                  Update Status Lamaran
+                </h2>
+                <div className="flex gap-6 items-center py-2 flex-wrap">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.syncGlintsStatus || false}
+                      onChange={(e) => setConfig({ ...config, syncGlintsStatus: e.target.checked })}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="text-sm font-medium text-slate-300">Update Status Glints</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.syncJobstreetStatus || false}
+                      onChange={(e) => setConfig({ ...config, syncJobstreetStatus: e.target.checked })}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-purple-500 focus:ring-purple-500"
+                    />
+                    <span className="text-sm font-medium text-slate-300">Update Status Jobstreet</span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-between items-center border-b border-slate-800 pb-2 flex-wrap gap-2">
                 <h2 className="text-lg font-semibold text-slate-200">
-                  Filter Pencarian Pekerjaan
+                  Filter Pencarian
                 </h2>
                 <label className="flex items-center gap-2 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition">
                   <input
@@ -881,7 +912,7 @@ export default function Home() {
                     className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
                   />
                   <span className="text-xs font-semibold text-emerald-400">
-                    Indeed: Tanpa Filter Job Title (Cari Semua Loker)
+                    Indeed: Cari Semua Loker (Tanpa Filter Judul)
                   </span>
                 </label>
               </div>
@@ -889,7 +920,7 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Kata Kunci Pekerjaan (Search Keywords)
+                    Kata Kunci Pekerjaan
                   </label>
                   <input
                     type="text"
@@ -902,7 +933,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Lokasi Kerja (Location)
+                    Lokasi Kerja
                   </label>
                   <input
                     type="text"
@@ -914,7 +945,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Worker Konkuren (Workers / Tabs)
+                    Worker Konkuren
                   </label>
                   <input
                     type="number"
@@ -932,8 +963,8 @@ export default function Home() {
               <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-200">🎯 Pengaturan Kuota Limit Harian</h3>
-                    <p className="text-xs text-slate-400">Pilih bagaimana kuota limit lamaran dibagi antar platform.</p>
+                    <h3 className="text-sm font-semibold text-slate-200">Pengaturan Kuota Harian</h3>
+                    <p className="text-xs text-slate-400">Pembagian kuota lamaran per hari.</p>
                   </div>
                   <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
                     <button
@@ -945,7 +976,7 @@ export default function Home() {
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      🔵 Kuota Gabungan (Shared)
+                      Kuota Gabungan
                     </button>
                     <button
                       type="button"
@@ -956,7 +987,7 @@ export default function Home() {
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      🟣 Kuota Per-Platform
+                      Kuota Per-Platform
                     </button>
                   </div>
                 </div>
@@ -978,7 +1009,7 @@ export default function Home() {
                         />
                       </div>
                       <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-400">
-                        💡 <b>Skema 1 Aktif:</b> Total akumulasi Glints + Jobstreet + LinkedIn + Indeed maksimal <b>{config.limitPerDay} lamaran</b> (bot akan otomatis berhenti jika total gabungan tercapai).
+                        Total gabungan maksimal <b>{config.limitPerDay} lamaran</b> untuk semua platform.
                       </div>
                     </div>
                   </div>
@@ -986,7 +1017,7 @@ export default function Home() {
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
                     <div>
                       <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
-                        Limit Khusus Glints
+                        Limit Glints
                       </label>
                       <input
                         type="number"
@@ -995,11 +1026,10 @@ export default function Home() {
                         onChange={(e) => setConfig({ ...config, limitGlints: parseInt(e.target.value) || 0 })}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitGlints || 80} lowongan di Glints.</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-purple-400 uppercase tracking-wider mb-1">
-                        Limit Khusus Jobstreet
+                        Limit Jobstreet
                       </label>
                       <input
                         type="number"
@@ -1008,11 +1038,10 @@ export default function Home() {
                         onChange={(e) => setConfig({ ...config, limitJobstreet: parseInt(e.target.value) || 0 })}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 font-bold"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitJobstreet || 75} lowongan di Jobstreet.</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-sky-400 uppercase tracking-wider mb-1">
-                        Limit Khusus LinkedIn
+                        Limit LinkedIn
                       </label>
                       <input
                         type="number"
@@ -1021,11 +1050,10 @@ export default function Home() {
                         onChange={(e) => setConfig({ ...config, limitLinkedin: parseInt(e.target.value) || 0 })}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500 font-bold"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitLinkedin || 50} lowongan di LinkedIn.</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-                        Limit Khusus Indeed
+                        Limit Indeed
                       </label>
                       <input
                         type="number"
@@ -1034,7 +1062,6 @@ export default function Home() {
                         onChange={(e) => setConfig({ ...config, limitIndeed: parseInt(e.target.value) || 0 })}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-bold"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Maksimal {config.limitIndeed || 50} lowongan di Indeed.</p>
                     </div>
                   </div>
                 )}
@@ -1044,8 +1071,8 @@ export default function Home() {
               <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-200">🌐 Mesin Browser & Anti-Bot</h3>
-                    <p className="text-xs text-slate-400">Pilih browser untuk menjalankan bot dan setup login (disarankan Google Chrome Asli).</p>
+                    <h3 className="text-sm font-semibold text-slate-200">Mesin Browser</h3>
+                    <p className="text-xs text-slate-400">Pilih browser untuk menjalankan bot dan setup login.</p>
                   </div>
                   <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
                     <button
@@ -1057,7 +1084,7 @@ export default function Home() {
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      🟢 Google Chrome Asli (Auto-Fallback)
+                      Google Chrome Asli
                     </button>
                     <button
                       type="button"
@@ -1068,26 +1095,23 @@ export default function Home() {
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      🟡 Chromium Bawaan
+                      Chromium Bawaan
                     </button>
                   </div>
                 </div>
 
                 {config.useSystemChrome !== false ? (
                   <div className="space-y-2 text-xs text-slate-300">
-                    <p className="text-emerald-400 font-medium">
-                      ✓ Prioritas 1: Membuka Google Chrome resmi sistem dengan proteksi anti-bot penuh (Widevine, real codecs).
-                    </p>
                     <p className="text-slate-400">
-                      ✓ Prioritas 2 (Fallback): Jika Google Chrome gagal terbuka, otomatis beralih ke Chromium bawaan dengan tetap mempertahankan sesi pada folder <code className="text-slate-300 bg-slate-950 px-1 py-0.5 rounded">automation-profile/</code>.
+                      Prioritas utama Google Chrome resmi sistem dengan fallback otomatis ke Chromium bawaan.
                     </p>
-                    <div className="pt-2">
+                    <div className="pt-1">
                       <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                        Custom Chrome Executable Path (Opsional - Kosongkan jika ingin auto-detect)
+                        Custom Chrome Executable Path (Opsional)
                       </label>
                       <input
                         type="text"
-                        placeholder="Contoh MacOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                        placeholder="Contoh: C:\Program Files\Google\Chrome\Application\chrome.exe"
                         value={config.customChromePath || ''}
                         onChange={(e) => setConfig({ ...config, customChromePath: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
@@ -1095,8 +1119,8 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-400">
-                    ⚠️ Bot akan selalu dijalankan menggunakan engine Chromium bawaan Puppeteer.
+                  <p className="text-xs text-slate-400">
+                    Bot dijalankan menggunakan Chromium bawaan Puppeteer.
                   </p>
                 )}
               </div>
@@ -1105,11 +1129,11 @@ export default function Home() {
               <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                      <span>✨</span> Google Gemini AI (Smart Question Answering)
+                    <h3 className="text-sm font-semibold text-slate-200">
+                      Google Gemini AI
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Digunakan bot untuk menjawab pertanyaan kuesioner lowongan yang belum ada di database secara otomatis &amp; cerdas.
+                      Menjawab pertanyaan kuesioner lowongan yang belum ada di database.
                     </p>
                   </div>
                   <a
@@ -1118,7 +1142,7 @@ export default function Home() {
                     rel="noreferrer"
                     className="text-xs text-blue-400 hover:text-blue-300 font-medium underline flex items-center gap-1 self-start sm:self-auto"
                   >
-                    <span>Dapatkan API Key Gratis</span>
+                    <span>Dapatkan API Key</span>
                     <span>↗</span>
                   </a>
                 </div>
@@ -1128,9 +1152,6 @@ export default function Home() {
                     <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
                       Gemini API Key <span className="text-slate-500 font-normal lowercase">(opsional)</span>
                     </label>
-                    <span className="text-[11px] text-slate-500">
-                      Opsional / Tanpa AI
-                    </span>
                   </div>
                   <div className="relative">
                     <input
@@ -1143,27 +1164,24 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => setShowGeminiKey(!showGeminiKey)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 font-medium"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-medium"
                     >
-                      <span>{showGeminiKey ? '🙈 Sembunyikan' : '👁️ Tampilkan'}</span>
+                      {showGeminiKey ? 'Sembunyikan' : 'Tampilkan'}
                     </button>
                   </div>
-                  <div className="flex items-start gap-2 text-[11px] text-slate-500 mt-2">
-                    <span className="text-blue-400 font-bold">ℹ️</span>
-                    <span>
-                      <strong>Opsional:</strong> Jika diisi, bot menggunakan Gemini AI untuk menjawab pertanyaan kuesioner baru secara cerdas. Jika dikosongkan, bot tetap bekerja normal menggunakan Database Pertanyaan dan pilihan opsi default.
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    Opsional. Jika kosong, bot akan menggunakan database pertanyaan dan pilihan opsi default.
+                  </p>
                 </div>
               </div>
 
               <div className="flex justify-between items-center border-b border-slate-800 pb-2 pt-4 flex-wrap gap-2">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-200">
-                    Integrasi Google Sheets API (Cloud Database)
+                    Google Sheets API
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Digunakan untuk menyimpan log riwayat lamaran dan knowledge base pertanyaan kuisioner (tanpa butuh DB).
+                    Penyimpanan log riwayat lamaran dan database pertanyaan.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1173,7 +1191,7 @@ export default function Home() {
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
                     title="Unduh backup konfigurasi & profil ke file JSON"
                   >
-                    📤 Export JSON
+                    Export JSON
                   </button>
                   <button
                     type="button"
@@ -1181,23 +1199,19 @@ export default function Home() {
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
                     title="Impor konfigurasi dari teks atau file JSON"
                   >
-                    📥 Import JSON
+                    Import JSON
                   </button>
                 </div>
               </div>
 
               <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-lg flex items-center justify-between text-xs text-blue-300 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">💡</span>
-                  <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
-                </div>
+                <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
                 <button
                   type="button"
                   onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
-                  className="font-semibold text-blue-400 hover:text-blue-200 underline flex items-center gap-1"
+                  className="font-semibold text-blue-400 hover:text-blue-200 underline"
                 >
-                  <span>Buka Tutorial Langkah Demi Langkah</span>
-                  <span>→</span>
+                  Buka Panduan Setup →
                 </button>
               </div>
 
@@ -1217,7 +1231,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Tab Log Lamaran (Sheet Name)
+                    Tab Log Lamaran
                   </label>
                   <input
                     type="text"
@@ -1245,7 +1259,7 @@ export default function Home() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Google Credentials JSON (Service Account)
+                  Google Credentials JSON
                 </label>
                 <textarea
                   rows={6}
@@ -1288,16 +1302,16 @@ export default function Home() {
                       <span>Menyimpan Konfigurasi...</span>
                     </>
                   ) : (
-                    <span>💾 Simpan Konfigurasi</span>
+                    <span>Simpan Konfigurasi</span>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={handleResetConfig}
-                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5"
+                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition"
                   title="Kosongkan semua form dan kembalikan ke kondisi onboarding baru"
                 >
-                  🔄 Reset ke Awal (Kosongkan Form)
+                  Reset Pengaturan
                 </button>
               </div>
             </form>
@@ -1308,10 +1322,10 @@ export default function Home() {
             <form onSubmit={handleSaveConfig} className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
-                  👤 Profil Pelamar (Dijadikan Referensi Jawaban Pertanyaan)
+                  Profil Pelamar
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Data ini digunakan oleh bot &amp; AI untuk menjawab pertanyaan kuisioner Glints &amp; JobStreet secara otomatis.
+                  Data referensi untuk menjawab kuesioner dan kualifikasi lowongan kerja secara otomatis.
                 </p>
               </div>
 
@@ -1477,10 +1491,10 @@ export default function Home() {
                         ?
                       </span>
                       <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 shadow-xl z-50 pointer-events-none">
-                        <p className="font-semibold text-blue-400 mb-1">💡 Cara Kerja Checklist Skills:</p>
-                        <p className="leading-relaxed">Isi semua keahlian &amp; tools yang Anda pakai (bahasa pemrograman, framework, database, alat analisis data, devops, dll).</p>
-                        <p className="mt-1.5 text-slate-400">• <strong className="text-purple-400">Jobstreet</strong>: Otomatis mencentang checkbox opsi yang cocok dengan daftar ini.</p>
-                        <p className="text-slate-400">• <strong className="text-emerald-400">Glints</strong>: Otomatis memilih tingkat &quot;Ahli / Advanced&quot;.</p>
+                        <p className="font-semibold text-blue-400 mb-1">Checklist Keahlian:</p>
+                        <p className="leading-relaxed">Daftar keahlian dan tools yang Anda kuasai untuk pengisian kuesioner lowongan.</p>
+                        <p className="mt-1.5 text-slate-400">• <strong className="text-purple-400">Jobstreet</strong>: Mencentang opsi kualifikasi yang cocok.</p>
+                        <p className="text-slate-400">• <strong className="text-emerald-400">Glints</strong>: Memilih tingkat keahlian.</p>
                       </div>
                     </div>
                   </div>
@@ -1488,9 +1502,8 @@ export default function Home() {
                     type="button"
                     onClick={() => setIsTemplateModalOpen(true)}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-blue-950/80 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 transition flex items-center gap-1.5 shadow-sm"
-                    title="Pilih template profesi (Fullstack, Finance, Digital Marketing, Guru, Data Analis, QA, DevOps, Project Manager)"
                   >
-                    <span>📋</span> Pilih Template Profesi
+                    Pilih Template Profesi
                   </button>
                 </div>
                 <textarea
@@ -1500,12 +1513,6 @@ export default function Home() {
                   onChange={(e) => setConfig({ ...config, skills: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed font-mono"
                 />
-                <div className="mt-1.5 p-2.5 bg-slate-950/80 border border-slate-800 rounded-md flex items-start gap-2 text-xs text-slate-400">
-                  <span className="text-blue-400 font-bold">ℹ️</span>
-                  <span>
-                    <strong>Tips Checklist:</strong> Bot mencocokkan pertanyaan kuesioner lowongan dengan daftar skill di atas. Semakin lengkap daftar skill &amp; tools yang Anda masukkan, semakin akurat bot mencentang opsi kuesioner kualifikasi secara otomatis.
-                  </span>
-                </div>
               </div>
 
               {saveStatus && (
@@ -1536,19 +1543,19 @@ export default function Home() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                       </svg>
-                      <span>Menyimpan Profil Pelamar...</span>
+                      <span>Menyimpan Profil...</span>
                     </>
                   ) : (
-                    <span>💾 Simpan Profil Pelamar</span>
+                    <span>Simpan Profil</span>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={handleResetConfig}
-                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5"
-                  title="Kosongkan semua form dan kembalikan ke kondisi onboarding baru"
+                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition"
+                  title="Kembalikan form ke awal"
                 >
-                  🔄 Reset ke Awal (Kosongkan Form)
+                  Reset Form
                 </button>
               </div>
             </form>
@@ -1562,11 +1569,11 @@ export default function Home() {
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <h2 className="text-lg font-semibold text-slate-200">
-                      📋 Knowledge Base Pertanyaan Kuisioner ({questions.length} Pertanyaan)
+                      Database Pertanyaan ({questions.length})
                     </h2>
                     {questionsSource === 'google_sheets' ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets Active ({config.questionsSheetName || 'Sheet2'})
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets ({config.questionsSheetName || 'Sheet2'})
                       </span>
                     ) : (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
@@ -1575,7 +1582,7 @@ export default function Home() {
                     )}
                   </div>
                   <p className="text-xs text-slate-400 mt-1">
-                    Knowledge base pertanyaan & jawaban kuisioner screening lowongan (Glints, Jobstreet, LinkedIn, Indeed).
+                    Daftar pertanyaan dan jawaban kuesioner lowongan kerja.
                   </p>
                 </div>
 
@@ -1585,7 +1592,7 @@ export default function Home() {
                     onClick={() => setIsNewQuestionModalOpen(true)}
                     className="px-3.5 py-1.5 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5"
                   >
-                    ➕ Tambah Pertanyaan
+                    Tambah Pertanyaan
                   </button>
 
                   {/* Clean Duplicate Questions Button */}
@@ -1593,7 +1600,7 @@ export default function Home() {
                     onClick={handleCleanCsv}
                     className="px-3.5 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
                   >
-                    🧼 Bersihkan Duplikat
+                    Bersihkan Duplikat
                   </button>
                 </div>
               </div>
@@ -1617,7 +1624,7 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder="🔍 Cari pertanyaan, tipe, atau jawaban..."
+                      placeholder="Cari pertanyaan, tipe, atau jawaban..."
                       value={questionSearch}
                       onChange={(e) => setQuestionSearch(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
@@ -1642,7 +1649,7 @@ export default function Home() {
                           <th className="p-3 w-28">Tipe</th>
                           <th className="p-3">Pilihan Opsi</th>
                           <th className="p-3">Jawaban Bot</th>
-                          <th className="p-3 w-24 text-center">Aksi</th>
+                          <th className="p-3 w-28 text-center">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-normal">
@@ -1664,7 +1671,7 @@ export default function Home() {
                                 <td colSpan={6} className="p-8 text-center text-slate-500 italic">
                                   {questionSearch
                                     ? `Tidak ditemukan pertanyaan yang cocok dengan "${questionSearch}".`
-                                    : 'Belum ada pertanyaan di database Google Sheets.'}
+                                    : 'Belum ada pertanyaan di database.'}
                                 </td>
                               </tr>
                             );
@@ -1698,17 +1705,17 @@ export default function Home() {
                                   <div className="flex items-center justify-center gap-1.5">
                                     <button
                                       onClick={() => setEditingQuestion(item)}
-                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 p-1.5 rounded transition"
+                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded transition"
                                       title="Edit Pertanyaan"
                                     >
-                                      ✏️
+                                      Edit
                                     </button>
                                     <button
                                       onClick={() => handleDeleteQuestion(item.id)}
-                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-rose-400 p-1.5 rounded transition"
+                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-rose-400 px-2 py-1 rounded transition"
                                       title="Hapus Pertanyaan"
                                     >
-                                      🗑️
+                                      Hapus
                                     </button>
                                   </div>
                                 </td>
@@ -1726,7 +1733,7 @@ export default function Home() {
                 <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
                   <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h3 className="text-base font-semibold text-slate-100">➕ Tambah Pertanyaan Baru</h3>
+                      <h3 className="text-base font-semibold text-slate-100">Tambah Pertanyaan Baru</h3>
                       <button
                         onClick={() => setIsNewQuestionModalOpen(false)}
                         className="text-slate-400 hover:text-slate-200 text-lg leading-none"
@@ -1815,7 +1822,7 @@ export default function Home() {
                 <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
                   <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h3 className="text-base font-semibold text-slate-100">✏️ Edit Pertanyaan &amp; Jawaban</h3>
+                      <h3 className="text-base font-semibold text-slate-100">Edit Pertanyaan</h3>
                       <button
                         onClick={() => setEditingQuestion(null)}
                         className="text-slate-400 hover:text-slate-200 text-lg leading-none"
@@ -1901,7 +1908,7 @@ export default function Home() {
           {activeTab === 'logs' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Aktivitas Mesin Bot (Real-time):</span>
+                <span className="text-slate-400 text-sm font-medium">Log Aktivitas:</span>
                 <button
                   onClick={() => setLogs([])}
                   className="text-xs text-slate-500 hover:text-slate-300 transition"
@@ -1934,16 +1941,16 @@ export default function Home() {
             </div>
           )}
 
-          {/* TAB 3: HISTORY */}
+          {/* TAB 5: HISTORY */}
           {activeTab === 'history' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Riwayat Pekerjaan yang Dilamar (dari Google Sheets):</span>
+                <span className="text-slate-400 text-sm font-medium">Riwayat Lamaran:</span>
                 <button
                   onClick={() => fetchAppliedHistory()}
-                  className="text-xs text-blue-400 hover:underline"
+                  className="text-xs text-blue-400 hover:underline px-2 py-1"
                 >
-                  🔄 Refresh Data
+                  Refresh Data
                 </button>
               </div>
               <div className="overflow-x-auto">
@@ -1989,11 +1996,19 @@ export default function Home() {
                           <td className="py-3 px-4">
                             <span
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                job.status === 'Success'
+                                job.status === 'Tidak Sesuai' || job.status?.toLowerCase().includes('tidak sesuai')
+                                  ? 'bg-rose-950 text-rose-400 border border-rose-900'
+                                  : job.status === 'Dalam Review' || job.status?.toLowerCase().includes('review') || job.status?.toLowerCase().includes('ditinjau')
+                                  ? 'bg-sky-950 text-sky-400 border border-sky-900'
+                                  : job.status === 'Wawancara' || job.status?.toLowerCase().includes('wawancara') || job.status?.toLowerCase().includes('interview')
+                                  ? 'bg-purple-950 text-purple-400 border border-purple-900'
+                                  : job.status === 'Diterima' || job.status?.toLowerCase().includes('diterima') || job.status?.toLowerCase().includes('offered')
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold'
+                                  : job.status === 'Success' || job.status === 'Applied' || job.status === 'Dilamar'
                                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-900'
                                   : job.status === 'Already Applied'
                                   ? 'bg-amber-950 text-amber-400 border border-amber-900'
-                                  : 'bg-rose-950 text-rose-400 border border-rose-900'
+                                  : 'bg-slate-800 text-slate-300 border border-slate-700'
                               }`}
                             >
                               {job.status}
@@ -2006,7 +2021,7 @@ export default function Home() {
                               rel="noreferrer"
                               className="text-blue-400 hover:underline text-xs"
                             >
-                              Buka Detail 🔗
+                              Buka Detail ↗
                             </a>
                           </td>
                         </tr>
@@ -2026,10 +2041,10 @@ export default function Home() {
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
                   <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-                    📥 Impor Konfigurasi (JSON)
+                    Impor Konfigurasi (JSON)
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Pilih untuk copy-paste teks JSON langsung atau upload file .json
+                    Impor konfigurasi dari teks JSON atau upload file.
                   </p>
                 </div>
                 <button
@@ -2046,20 +2061,20 @@ export default function Home() {
                   onClick={() => { setImportMode('text'); setImportError(null); }}
                   className={`flex-1 py-1.5 rounded-md transition ${importMode === 'text' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  📋 Copy-Paste Teks JSON
+                  Teks JSON
                 </button>
                 <button
                   type="button"
                   onClick={() => { setImportMode('file'); setImportError(null); }}
                   className={`flex-1 py-1.5 rounded-md transition ${importMode === 'file' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  📁 Upload File .JSON
+                  Upload File .JSON
                 </button>
               </div>
 
               {importError && (
                 <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-lg text-rose-300 text-xs">
-                  ⚠️ {importError}
+                  {importError}
                 </div>
               )}
 
@@ -2081,7 +2096,9 @@ export default function Home() {
                   className="py-8 border-2 border-dashed border-slate-800 hover:border-blue-500/60 rounded-xl text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/70"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="text-3xl mb-2">📁</div>
+                  <svg className="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
                   <p className="text-sm font-semibold text-slate-200">Klik untuk memilih file konfigurasi .json</p>
                   <p className="text-xs text-slate-400 mt-1">Pilih file JSON hasil export sebelumnya</p>
                   <input
@@ -2109,7 +2126,7 @@ export default function Home() {
                     disabled={!importJsonText.trim()}
                     className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold shadow-md transition"
                   >
-                    ✅ Terapkan Konfigurasi
+                    Terapkan Konfigurasi
                   </button>
                 )}
               </div>
@@ -2125,10 +2142,10 @@ export default function Home() {
               <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
                 <div>
                   <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <span>📋</span> Pilih Template Profesi &amp; Keahlian
+                    Pilih Template Profesi
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Pilih bidang pekerjaan Anda untuk mengisi daftar skill checklist kuesioner dan kata kunci pencarian otomatis.
+                    Pilih bidang pekerjaan untuk mengisi keahlian dan kata kunci pencarian otomatis.
                   </p>
                 </div>
                 <button
@@ -2220,7 +2237,7 @@ export default function Home() {
                         onClick={() => handleApplyTemplate(role)}
                         className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md hover:shadow-blue-500/20 transition flex items-center gap-1.5"
                       >
-                        <span>⚡ Terapkan Template</span>
+                        <span>Terapkan Template</span>
                       </button>
                     </div>
                   </div>
@@ -2230,7 +2247,7 @@ export default function Home() {
               {/* Footer */}
               <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs">
                 <span className="text-slate-400">
-                  💡 Anda dapat mengedit / menyesuaikan kembali daftar skill &amp; keyword setelah template diterapkan.
+                  Daftar keahlian dan kata kunci dapat disesuaikan kembali setelah template diterapkan.
                 </span>
                 <button
                   type="button"
@@ -2252,10 +2269,10 @@ export default function Home() {
               <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
                 <div>
                   <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <span>📖</span> Tutorial Setup Google Sheets (Cloud Database)
+                    Panduan Setup Google Sheets
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Panduan 5 langkah mudah menghubungkan Google Spreadsheet untuk log lamaran &amp; bank soal kuesioner.
+                    Panduan menghubungkan Google Spreadsheet untuk log lamaran dan database pertanyaan.
                   </p>
                 </div>
                 <button
@@ -2270,11 +2287,11 @@ export default function Home() {
               {/* Stepper Navigation */}
               <div className="px-6 py-3 bg-slate-900/80 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
                 {[
-                  { num: 1, title: '1. Aktifkan API', icon: '☁️' },
-                  { num: 2, title: '2. Service Account', icon: '🔑' },
-                  { num: 3, title: '3. Buat Sheets & Share', icon: '📊' },
-                  { num: 4, title: '4. Ambil ID', icon: '🆔' },
-                  { num: 5, title: '5. Setup Tab', icon: '📑' },
+                  { num: 1, title: '1. Aktifkan API' },
+                  { num: 2, title: '2. Service Account' },
+                  { num: 3, title: '3. Buat Sheets & Share' },
+                  { num: 4, title: '4. Ambil ID' },
+                  { num: 5, title: '5. Setup Tab' },
                 ].map((s) => (
                   <button
                     key={s.num}
@@ -2286,7 +2303,6 @@ export default function Home() {
                         : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
                     }`}
                   >
-                    <span>{s.icon}</span>
                     <span>{s.title}</span>
                   </button>
                 ))}
@@ -2297,11 +2313,11 @@ export default function Home() {
                 {activeTutorialStep === 1 && (
                   <div className="space-y-3">
                     <div className="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-blue-300 mb-1 flex items-center gap-1.5">
-                        <span>☁️</span> Langkah 1: Buat Project &amp; Aktifkan Google Sheets API
+                      <h4 className="font-bold text-sm text-blue-300 mb-1">
+                        Langkah 1: Buat Project &amp; Aktifkan Google Sheets API
                       </h4>
                       <p className="text-slate-300">
-                        Google Cloud Console adalah tempat membuat integrasi resmi gratis dengan Google Spreadsheet.
+                        Google Cloud Console adalah tempat membuat integrasi resmi dengan Google Spreadsheet.
                       </p>
                     </div>
 
@@ -2328,7 +2344,7 @@ export default function Home() {
                         Buka menu samping kiri ☰ → <strong>APIs &amp; Services</strong> → <strong>Library</strong>.
                       </li>
                       <li>
-                        Cari <strong>&quot;Google Sheets API&quot;</strong> pada kolom pencarian, klik hasil pencarian, lalu klik tombol biru <strong>&quot;Enable&quot;</strong>.
+                        Cari <strong>&quot;Google Sheets API&quot;</strong> pada kolom pencarian, klik hasil pencarian, lalu klik tombol <strong>&quot;Enable&quot;</strong>.
                       </li>
                     </ol>
                   </div>
@@ -2337,11 +2353,11 @@ export default function Home() {
                 {activeTutorialStep === 2 && (
                   <div className="space-y-3">
                     <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-emerald-300 mb-1 flex items-center gap-1.5">
-                        <span>🔑</span> Langkah 2: Buat Service Account &amp; Download credentials.json
+                      <h4 className="font-bold text-sm text-emerald-300 mb-1">
+                        Langkah 2: Buat Service Account &amp; Download credentials.json
                       </h4>
                       <p className="text-slate-300">
-                        Service Account berfungsi seperti &quot;robot email&quot; yang diberi izin untuk menulis data riwayat lamaran ke spreadsheet Anda.
+                        Service Account berfungsi sebagai akun otomatis yang diberi izin untuk menulis data riwayat lamaran ke spreadsheet Anda.
                       </p>
                     </div>
 
@@ -2365,7 +2381,7 @@ export default function Home() {
                         Pilih tipe key <strong>JSON</strong>, lalu klik <strong>Create</strong>. File <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">credentials.json</code> akan otomatis terunduh ke komputer Anda.
                       </li>
                       <li>
-                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> tersebut dengan TextEdit / Notepad / VSCode, <strong>copy seluruh teksnya</strong>, dan paste ke form <strong>Google Credentials JSON</strong> di CV Blaster.
+                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> tersebut, <strong>copy seluruh teksnya</strong>, dan paste ke form <strong>Google Credentials JSON</strong> di CV Blaster.
                       </li>
                     </ol>
                   </div>
@@ -2374,8 +2390,8 @@ export default function Home() {
                 {activeTutorialStep === 3 && (
                   <div className="space-y-3">
                     <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-purple-300 mb-1 flex items-center gap-1.5">
-                        <span>📊</span> Langkah 3: Buat Google Spreadsheet Baru &amp; Share Akses
+                      <h4 className="font-bold text-sm text-purple-300 mb-1">
+                        Langkah 3: Buat Google Spreadsheet Baru &amp; Share Akses
                       </h4>
                       <p className="text-slate-300">
                         Spreadsheet Anda harus dibagikan ke email Service Account agar bot memiliki izin menulis log.
@@ -2420,8 +2436,8 @@ export default function Home() {
                 {activeTutorialStep === 4 && (
                   <div className="space-y-3">
                     <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-amber-300 mb-1 flex items-center gap-1.5">
-                        <span>🆔</span> Langkah 4: Ambil Google Spreadsheet ID
+                      <h4 className="font-bold text-sm text-amber-300 mb-1">
+                        Langkah 4: Ambil Google Spreadsheet ID
                       </h4>
                       <p className="text-slate-300">
                         Spreadsheet ID adalah kode unik di URL browser Google Sheets Anda.
@@ -2434,7 +2450,7 @@ export default function Home() {
                         https://docs.google.com/spreadsheets/d/<span className="bg-amber-500/20 text-amber-300 px-1 py-0.5 rounded font-bold border border-amber-500/40">1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms</span>/edit#gid=0
                       </div>
                       <p>
-                        2. Salin kode karakter acak di antara <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/d/</code> dan <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/edit</code> (yang disorot kuning di atas).
+                        2. Salin kode karakter unik di antara <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/d/</code> dan <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/edit</code> (yang disorot di atas).
                       </p>
                       <p>
                         3. Paste kode tersebut ke input <strong>Google Spreadsheet ID</strong> di tab Konfigurasi CV Blaster.
@@ -2446,11 +2462,11 @@ export default function Home() {
                 {activeTutorialStep === 5 && (
                   <div className="space-y-3">
                     <div className="p-3 bg-indigo-950/40 border border-indigo-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-indigo-300 mb-1 flex items-center gap-1.5">
-                        <span>📑</span> Langkah 5: Setup Nama Tab (Job Applied &amp; Question Bank)
+                      <h4 className="font-bold text-sm text-indigo-300 mb-1">
+                        Langkah 5: Setup Nama Tab
                       </h4>
                       <p className="text-slate-300">
-                        CV Blaster menggunakan 2 tab sheet terpisah untuk menyimpan data secara rapi.
+                        CV Blaster menggunakan 2 tab sheet terpisah untuk menyimpan data riwayat lamaran dan pertanyaan.
                       </p>
                     </div>
 
@@ -2458,19 +2474,19 @@ export default function Home() {
                       {/* Tab 1: Log Lamaran */}
                       <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-100 flex items-center gap-1">
-                            <span>📌</span> Tab 1: Log Riwayat Lamaran
+                          <span className="font-bold text-slate-100">
+                            Tab 1: Log Riwayat Lamaran
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 font-mono">
                             Default: Sheet1
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400">
-                          Menyimpan daftar perusahaan, posisi, platform, link loker, dan status lamaran yang sudah dikirim bot.
+                          Menyimpan riwayat perusahaan, posisi, platform, link lowongan, dan status lamaran.
                         </p>
                         <div className="pt-1">
                           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                            Header Kolom (Dibuat otomatis oleh bot):
+                            Header Kolom:
                           </span>
                           <div className="p-2 bg-slate-950 rounded font-mono text-[10px] text-slate-300 break-all">
                             Timestamp | Company | Job Title | Platform | Job URL | Status
@@ -2481,8 +2497,8 @@ export default function Home() {
                       {/* Tab 2: Database Pertanyaan */}
                       <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-100 flex items-center gap-1">
-                            <span>❓</span> Tab 2: Database Pertanyaan
+                          <span className="font-bold text-slate-100">
+                            Tab 2: Database Pertanyaan
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
                             Default: Sheet2
@@ -2499,9 +2515,6 @@ export default function Home() {
                             Question | Type | Options | Answer
                           </div>
                         </div>
-                        <p className="text-[10px] text-emerald-400 mt-1">
-                          ✨ <em>Tips: Cukup klik tombol <strong>&quot;Migrasikan ke Google Sheets&quot;</strong> di Tab Database Pertanyaan untuk membuat &amp; mengisi tab ini secara instan!</em>
-                        </p>
                       </div>
                     </div>
                   </div>
@@ -2545,9 +2558,11 @@ export default function Home() {
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
             <div className="bg-slate-900 border border-amber-500/50 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
               <div className="flex items-center gap-3 text-amber-400">
-                <span className="text-3xl">⚠️</span>
+                <svg className="w-6 h-6 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
                 <div>
-                  <h3 className="text-base font-bold text-slate-100">Peringatan: Google Sheets Tidak Terkoneksi</h3>
+                  <h3 className="text-base font-bold text-slate-100">Google Sheets Tidak Terkoneksi</h3>
                   <p className="text-xs text-amber-400/90 font-medium">Sistem gagal menghubungi server spreadsheet</p>
                 </div>
               </div>
@@ -2563,13 +2578,13 @@ export default function Home() {
                   onClick={() => setSheetsWarning(null)}
                   className="px-4 py-2 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
                 >
-                  🛑 Batal & Periksa Koneksi
+                  Batal &amp; Periksa Koneksi
                 </button>
                 <button
                   onClick={() => executeStartBot(sheetsWarning.mode)}
                   className="px-4 py-2 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-lg transition"
                 >
-                  ⚡ Tetap Lanjutkan (Tanpa Sheets)
+                  Tetap Lanjutkan (Tanpa Sheets)
                 </button>
               </div>
             </div>

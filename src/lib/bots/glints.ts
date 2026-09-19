@@ -91,6 +91,7 @@ export async function runGlintsBot(
     const location = (config.location || '').trim();
 
     if (keyword) {
+      await page.bringToFront().catch(() => {});
       onLog(`✍️ Mengisi kata kunci pekerjaan: "${keyword}"...`);
       const keywordSelector = 'input[data-cy="search_bar_job_title"]';
       try {
@@ -135,6 +136,7 @@ export async function runGlintsBot(
 
     // 2. Ketik Lokasi dari Dashboard
     if (location) {
+      await page.bringToFront().catch(() => {});
       onLog(`✍️ Mengisi lokasi: "${location}"...`);
       const citySelector = 'input[data-cy="search_bar_city"], input[placeholder*="Semua Kota"], input[aria-label*="Semua Kota"]';
       try {
@@ -200,9 +202,27 @@ export async function runGlintsBot(
 
     // 3. Tekan Enter / Klik Tombol Cari untuk Eksekusi Pencarian
     onLog('↵ Menjalankan pencarian...');
-    
-    // Coba klik tombol Cari jika ada, atau tekan Enter
-    const clickedSearchBtn = await page.evaluate(() => {
+    await page.bringToFront().catch(() => {});
+
+    // Pemicu Enter langsung di elemen input via DOM Events & Form Submit
+    const keywordInputSelector = 'input[data-cy="search_bar_job_title"]';
+    await page.evaluate((sel: string) => {
+      const input = document.querySelector(sel) as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        if (input.form) {
+          try {
+            input.form.requestSubmit();
+          } catch {
+            input.form.submit();
+          }
+        }
+      }
+
+      // Klik tombol Cari jika ada
       const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
       const searchBtn = buttons.find(b => {
         const text = (b.textContent || '').trim();
@@ -211,19 +231,15 @@ export async function runGlintsBot(
       });
       if (searchBtn) {
         searchBtn.click();
-        return true;
       }
-      return false;
-    });
+    }, keywordInputSelector);
 
-    if (clickedSearchBtn) {
-      onLog('🔘 Tombol "Cari" berhasil diklik.');
-    } else {
-      onLog('↵ Menekan tombol Enter keyboard...');
+    // Kirim juga event keyboard Enter langsung dari Puppeteer
+    try {
       await page.keyboard.press('Enter');
-    }
+    } catch {}
 
-    await sleep(5000);
+    await sleep(4000);
 
     const resultUrl = page.url();
     const resultTitle = await page.title();
@@ -254,26 +270,29 @@ export async function runGlintsBot(
 
       // Scroll halaman perlahan untuk memuat seluruh 30 kartu batch pada halaman ini
       onLog(`📜 Menggulir halaman ke-${currentPage} untuk merender lowongan kerja...`);
-      await page.evaluate(async () => {
-        await new Promise<void>((resolve) => {
-          let totalHeight = 0;
-          const distance = 500;
-          const timer = setInterval(() => {
-            const scrollHeight = document.body.scrollHeight;
-            window.scrollBy(0, distance);
-            totalHeight += distance;
+      await page.bringToFront().catch(() => {});
 
-            if (totalHeight >= scrollHeight || totalHeight >= 7000) {
-              clearInterval(timer);
-              resolve();
-            }
-          }, 150);
-        });
-      });
-      await sleep(2000);
+      // Lakukan scroll dari sisi Node.js agar kebal terhadap background tab timer throttling
+      const scrollStep = 500;
+      const maxScrollY = 7500;
+      let currentScrolled = 0;
+
+      while (currentScrolled < maxScrollY && (global as any).isBotRunning !== false) {
+        const atBottom = await page.evaluate((step: number) => {
+          window.scrollBy(0, step);
+          const scrollPosition = window.scrollY + window.innerHeight;
+          return scrollPosition >= (document.body.scrollHeight - 100);
+        }, scrollStep);
+
+        currentScrolled += scrollStep;
+        await sleep(150);
+
+        if (atBottom) break;
+      }
+      await sleep(1500);
 
       // Scroll kembali ke atas
-      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
       await sleep(1000);
 
       // Ekstraksi dan Mapping Lengkap Setiap Kartu Lowongan Kerja (Job Card)
@@ -834,4 +853,231 @@ export async function runGlintsBot(
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+export interface GlintsApplicationStatus {
+  jobId?: string;
+  applicationId?: string;
+  company: string;
+  title: string;
+  status: string;
+  actionDate?: string;
+  closedReason?: string;
+}
+
+/**
+ * Scrapes applied job statuses from Glints (https://glints.com/id/user/applications?status=All&sortBy=Most+Recent)
+ */
+export async function syncGlintsApplicationStatuses(
+  page: any,
+  onLog: (msg: string) => void,
+  maxPages: number = 200,
+  onBatchExtracted?: (batch: GlintsApplicationStatus[], pageNum: number) => Promise<void>
+): Promise<GlintsApplicationStatus[]> {
+  const allApplications: GlintsApplicationStatus[] = [];
+  const seenIds = new Set<string>();
+
+  onLog('🔍 Membuka riwayat lamaran Glints: https://glints.com/id/user/applications?status=All&sortBy=Most+Recent');
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    if (global.isBotRunning === false) {
+      onLog('⏹️ Proses sinkronisasi dihentikan oleh pengguna.');
+      break;
+    }
+
+    const pageUrl = `https://glints.com/id/user/applications?status=All&sortBy=Most+Recent&page=${pageNum}`;
+    onLog(`📄 Memuat halaman ${pageNum} dari Glints...`);
+
+    try {
+      await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await sleep(2500);
+
+      const currentUrl = page.url();
+      if (currentUrl.includes('/login') || currentUrl.includes('/signup')) {
+        onLog('⚠️ Sesi login Glints tidak ditemukan. Anda harus login terlebih dahulu.');
+        throw new Error('Akun belum login ke Glints. Silakan login melalui tombol "Buka Browser (Login Setup)" di Dashboard terlebih dahulu.');
+      }
+
+      // Scroll sedikit ke bawah untuk memicu lazy-load jika ada
+      await page.evaluate(() => {
+        window.scrollBy(0, 800);
+      });
+      await sleep(1500);
+
+      // Tunggu elemen kartu muncul jika ada
+      try {
+        await page.waitForSelector(
+          '[aria-label*="Application card"], [class*="ApplicationCardContainer"], [class*="application_detail-job"], [data-job-id], a[href*="/id/user/applications/"]',
+          { timeout: 10000 }
+        );
+      } catch {
+        // Halaman mungkin kosong
+      }
+
+      const extractedCards: GlintsApplicationStatus[] = await page.evaluate(() => {
+        const results: GlintsApplicationStatus[] = [];
+
+        let cardElements = Array.from(
+          document.querySelectorAll('[aria-label*="Application card"], [class*="ApplicationCardContainer"]')
+        );
+
+        if (cardElements.length === 0) {
+          const links = Array.from(document.querySelectorAll('a[href*="/id/user/applications/"]'));
+          cardElements = links;
+        }
+
+        for (const card of cardElements) {
+          // 1. Job ID
+          const jobEl = card.querySelector('[data-job-id]') || card.querySelector('.application_detail-job');
+          const jobId = jobEl?.getAttribute('data-job-id') || '';
+
+          // 2. Application ID & Link
+          const linkEl = (card.tagName.toLowerCase() === 'a'
+            ? card
+            : card.querySelector('a[href*="/user/applications/"]')) as HTMLAnchorElement | null;
+          const href = linkEl?.getAttribute('href') || '';
+          const applicationId = href.split('/').filter(Boolean).pop() || '';
+
+          // 3. Job Title
+          const titleEl =
+            card.querySelector('[class*="JobTitle"]') ||
+            jobEl?.querySelector('div:first-child') ||
+            card.querySelector('h2, h3, [class*="title"]');
+          const title = (titleEl?.textContent || '').trim();
+
+          // 4. Company Name
+          const compEl =
+            card.querySelector('[class*="CompanyName"]') ||
+            card.querySelector('[class*="ApplicationCompanyInfo"] [class*="CompanyName"]') ||
+            card.querySelector('img[alt]');
+          let company = '';
+          if (compEl) {
+            company = compEl.getAttribute('alt') || compEl.textContent || '';
+          }
+          company = company.trim();
+
+          // 5. Action / Applied Date
+          const dateEl = card.querySelector('[class*="ActionDate"]');
+          const actionDate = (dateEl?.textContent || '').trim();
+
+          // 6. Status Tag
+          let status = '';
+          const tooltipEl =
+            card.querySelector('[class*="TooltipContainer"]') ||
+            card.querySelector('[role="tooltip"]') ||
+            card.querySelector('[class*="StatusTagContainer"] [class*="StatusTag"]');
+
+          if (tooltipEl) {
+            status = (tooltipEl.textContent || '').trim();
+            if (!status) {
+              const aria = tooltipEl.getAttribute('aria-label') || '';
+              if (/tidak sesuai/i.test(aria)) {
+                status = 'Tidak Sesuai';
+              } else if (/cocok|review/i.test(aria)) {
+                status = 'Dalam Review';
+              } else if (/dikirim|lamaranmu/i.test(aria)) {
+                status = 'Dilamar';
+              }
+            }
+          }
+
+          if (!status) {
+            const statusContainer = card.querySelector('[class*="StatusTagContainer"]');
+            if (statusContainer) {
+              status = (statusContainer.textContent || '').trim();
+            }
+          }
+
+          if (!status) {
+            const statusTag = card.querySelector('[class*="StatusTag"]');
+            if (statusTag) {
+              status = (statusTag.textContent || '').trim();
+            }
+          }
+
+          status = status.replace(/\s+/g, ' ').trim();
+
+          // 7. Closed Reason (opsional)
+          const closedEl = card.querySelector('[class*="JobClosedTagContainer"]');
+          const closedReason = (closedEl?.textContent || '').replace(/\s+/g, ' ').trim();
+
+          if (title || company) {
+            results.push({
+              jobId,
+              applicationId,
+              company,
+              title,
+              status: status || 'Dilamar',
+              actionDate,
+              closedReason,
+            });
+          }
+        }
+
+        return results;
+      });
+
+      if (extractedCards.length === 0) {
+        onLog(`ℹ️ Tidak ada kartu lamaran lagi di halaman ${pageNum}. Selesai memindai.`);
+        break;
+      }
+
+      let newCardsOnThisPage = 0;
+      for (const card of extractedCards) {
+        const uniqueKey = card.jobId || card.applicationId || `${card.company}_${card.title}`;
+        if (!seenIds.has(uniqueKey)) {
+          seenIds.add(uniqueKey);
+          allApplications.push(card);
+          newCardsOnThisPage++;
+        }
+      }
+
+      onLog(`📋 Halaman ${pageNum}: Berhasil membaca ${extractedCards.length} kartu (${newCardsOnThisPage} kartu baru).`);
+
+      if (newCardsOnThisPage === 0) {
+        onLog(`ℹ️ Kartu di halaman ${pageNum} identik dengan halaman sebelumnya. Mengakhiri pemindaian.`);
+        break;
+      }
+
+      // Jika jumlah kartu di halaman ini kurang dari 5, berarti ini halaman terakhir
+      if (extractedCards.length < 5) {
+        onLog(`ℹ️ Halaman ${pageNum} memiliki ${extractedCards.length} kartu (halaman terakhir). Seluruh riwayat selesai dipindai.`);
+        break;
+      }
+
+      // Periksa tombol "Next" jika ada
+      const isNextButtonDisabled = await page.evaluate(() => {
+        const nextButton = document.querySelector(
+          'button[aria-label*="next" i], button[aria-label*="selanjutnya" i]'
+        ) as HTMLButtonElement | null;
+        if (nextButton) {
+          return nextButton.disabled || nextButton.getAttribute('aria-disabled') === 'true';
+        }
+        return false;
+      });
+
+      if (isNextButtonDisabled) {
+        onLog(`ℹ️ Tombol halaman selanjutnya (Next) nonaktif di halaman ${pageNum}. Selesai memindai seluruh riwayat.`);
+        break;
+      }
+
+      // Update progres ke Google Sheets setiap 5 halaman
+      if (onBatchExtracted && pageNum % 5 === 0 && allApplications.length > 0) {
+        try {
+          await onBatchExtracted(allApplications, pageNum);
+        } catch (batchErr: any) {
+          onLog(`⚠️ Kendala saat menyimpan batch progres ke Google Sheets: ${batchErr.message || batchErr}`);
+        }
+      }
+
+      await sleep(1500);
+    } catch (pageErr: any) {
+      onLog(`⚠️ Kendala saat memindai halaman ${pageNum}: ${pageErr.message || pageErr}`);
+      break;
+    }
+  }
+
+  onLog(`✨ Total riwayat lamaran yang berhasil diekstrak dari Glints: ${allApplications.length}`);
+  return allApplications;
+}
+
 

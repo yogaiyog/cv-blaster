@@ -190,34 +190,74 @@ export async function runJobstreetBot(
             };
 
             const btn = findApplyElement();
-            if (!btn) return { exists: false, text: '', isAlreadyApplied: false, isExternal: false };
+            if (!btn) return { exists: false, text: '', isAlreadyApplied: false, isExternal: false, externalReason: '' };
 
             const buttonText = (btn.textContent || '').trim();
             const href = btn.getAttribute('href') || '';
+            const target = btn.getAttribute('target') || '';
 
             // Check if already applied
             const isAlreadyApplied = /Applied|Dilamar|Sudah Dilamar/i.test(buttonText);
 
-            // Check if external redirect
+            // Check for external link icon (SVG path M19 11... M21 3...) or external indicators
+            const hasExternalSvg = !!(
+              btn.querySelector('svg path[d*="M19 11"], svg path[d*="M21 3"]') ||
+              btn.querySelector('._1nyv0c0, .iqyw3t3f') ||
+              btn.innerHTML.includes('M19 11c-.6 0-1') ||
+              btn.innerHTML.includes('M21 3v-.4') ||
+              btn.querySelector('svg')
+            );
+
+            const isDaftarBtn = /^daftar$/i.test(buttonText) ||
+                               buttonText.toLowerCase().startsWith('daftar') ||
+                               Array.from(btn.querySelectorAll('span')).some(s => (s.textContent || '').trim().toLowerCase() === 'daftar');
+
+            const isDaftarOrApplyBtn = /^(daftar|apply)$/i.test(buttonText) ||
+                                       /^(daftar|apply)\b/i.test(buttonText) ||
+                                       Array.from(btn.querySelectorAll('span')).some(s => {
+                                         const t = (s.textContent || '').trim().toLowerCase();
+                                         return t === 'daftar' || t === 'apply';
+                                       });
+
+            const hasExternalKeywords = /situs perusahaan|company website|employer site|situs web|pendaftaran eksternal|register/i.test(buttonText);
+
+            const isTargetBlank = target === '_blank';
+
             let isExternal = false;
-            if (/situs perusahaan|company website|employer site|situs web/i.test(buttonText)) {
+            let externalReason = '';
+
+            if (isDaftarOrApplyBtn && hasExternalSvg) {
               isExternal = true;
+              externalReason = `Tombol pendaftaran eksternal "${buttonText}" dengan ikon panah tautan luar`;
+            } else if (isDaftarBtn) {
+              isExternal = true;
+              externalReason = 'Tombol pendaftaran eksternal ("Daftar")';
+            } else if (hasExternalSvg && !/Lamar Cepat|Quick Apply/i.test(buttonText)) {
+              isExternal = true;
+              externalReason = 'Memiliki ikon tautan eksternal (external link SVG)';
+            } else if (hasExternalKeywords) {
+              isExternal = true;
+              externalReason = `Teks tombol mengindikasikan situs luar ("${buttonText}")`;
+            } else if (isTargetBlank && !/Lamar Cepat|Quick Apply/i.test(buttonText)) {
+              isExternal = true;
+              externalReason = 'Tautan membuka di tab baru (target="_blank")';
             } else if (href.startsWith('http')) {
               try {
                 const parsedUrl = new URL(href);
                 const hostname = parsedUrl.hostname.toLowerCase();
                 if (!hostname.includes('jobstreet') && !hostname.includes('seek')) {
                   isExternal = true;
+                  externalReason = `Mengarahkan ke domain luar (${hostname})`;
                 }
               } catch {}
             }
 
-            // If it's explicitly "Lamar Cepat" / "Quick Apply", it's always internal
-            if (/Lamar Cepat|Quick Apply/i.test(buttonText)) {
+            // HANYA jika tombol murni bertuliskan "Lamar Cepat" / "Quick Apply" tanpa ikon tautan luar
+            if (/^(Lamar Cepat|Quick Apply)$/i.test(buttonText) && !btn.innerHTML.includes('M19 11') && !isTargetBlank) {
               isExternal = false;
             }
 
-            return { exists: true, text: buttonText, isAlreadyApplied, isExternal };
+            return { exists: true, text: buttonText, isAlreadyApplied, isExternal, externalReason };
           });
 
           if (!applyBtnStatus.exists) {
@@ -240,7 +280,14 @@ export async function runJobstreetBot(
           }
 
           if (applyBtnStatus.isExternal) {
-            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Mengarahkan ke situs eksternal ("${applyBtnStatus.text}"). Dilewati.`);
+            onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Dilewati (${applyBtnStatus.externalReason || 'Pendaftaran Eksternal / "Daftar"'}): ${url}`);
+            await addAppliedJob({ 
+              company: jobDetails.company || 'Jobstreet Company', 
+              title: jobDetails.title || 'Jobstreet Job', 
+              platform: 'Jobstreet', 
+              jobUrl: url, 
+              status: 'Skipped (External / Daftar)' 
+            });
             alreadyAppliedCount++;
             continue;
           }
@@ -288,6 +335,13 @@ export async function runJobstreetBot(
             }
 
             if (btn) {
+              const text = (btn.textContent || '').trim().toLowerCase();
+              const hasExternal = text.startsWith('daftar') ||
+                                  btn.innerHTML.includes('M19 11') ||
+                                  btn.innerHTML.includes('M21 3');
+              if (hasExternal) {
+                return; // Safety guard: Do not click external Daftar button
+              }
               btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
               btn.click();
             }
@@ -658,3 +712,214 @@ export async function runJobstreetBot(
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+export interface JobstreetApplicationStatus {
+  company: string;
+  title: string;
+  status: string;
+  rawStatus?: string;
+  location?: string;
+  actionDate?: string;
+}
+
+export async function syncJobstreetApplicationStatuses(
+  page: any,
+  onLog: (msg: string) => void,
+  maxPages: number = 100,
+  onBatchExtracted?: (batch: JobstreetApplicationStatus[], pageNum: number) => Promise<void>
+): Promise<JobstreetApplicationStatus[]> {
+  const allApplications: JobstreetApplicationStatus[] = [];
+  const seenKeys = new Set<string>();
+
+  onLog('Memulai sinkronisasi status lamaran Jobstreet...');
+  const baseUrl = 'https://id.jobstreet.com/id/my-activity/applied-jobs';
+  onLog(`Membuka riwayat lamaran Jobstreet: ${baseUrl}`);
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    if (global.isBotRunning === false) {
+      onLog('Proses sinkronisasi dihentikan oleh pengguna.');
+      break;
+    }
+
+    const pageUrl = pageNum === 1 ? baseUrl : `${baseUrl}?page=${pageNum}`;
+    onLog(`Memuat halaman ${pageNum} dari Jobstreet...`);
+
+    try {
+      await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await sleep(2500);
+
+      const currentUrl = page.url();
+      if (currentUrl.includes('/login') || currentUrl.includes('/sign-in') || currentUrl.includes('oauth')) {
+        onLog('Sesi login Jobstreet tidak ditemukan. Silakan login terlebih dahulu melalui tombol "Buka Browser (Login Setup)".');
+        throw new Error('Akun belum login ke Jobstreet. Silakan login melalui tombol "Buka Browser (Login Setup)" di Dashboard terlebih dahulu.');
+      }
+
+      // Scroll sedikit ke bawah untuk memicu lazy load
+      await page.evaluate(() => {
+        window.scrollBy(0, 800);
+      });
+      await sleep(1000);
+
+      // Cek jumlah total lowongan jika ada di badge (misal: "93 lowongan")
+      if (pageNum === 1) {
+        const totalText = await page.evaluate(() => {
+          const badge = document.querySelector('span[class*="11gsyt34"], h1 + span, [class*="my-activity"] span');
+          return badge?.textContent?.trim() || '';
+        });
+        if (totalText) {
+          onLog(`Ditemukan ringkasan total lamaran di Jobstreet: "${totalText}"`);
+        }
+      }
+
+      // Tunggu hingga elemen kartu muncul
+      try {
+        await page.waitForSelector('div[data-automation^="job-item-"]', { timeout: 10000 });
+      } catch {}
+
+      const extractedCards: JobstreetApplicationStatus[] = await page.evaluate(() => {
+        const results: JobstreetApplicationStatus[] = [];
+        const cardElements = Array.from(document.querySelectorAll('div[data-automation^="job-item-"]'));
+
+        for (const card of cardElements) {
+          // 1. Job Title
+          const titleEl = card.querySelector('h4 span[role="button"], h4 a, h4');
+          let title = '';
+          if (titleEl) {
+            title = (titleEl.textContent || '')
+              .replace(/^(?:Posisi Pekerjaan|Job Title)\s*/i, '')
+              .trim();
+          }
+
+          // 2. Company Name
+          let company = '';
+          const allSpans = Array.from(card.querySelectorAll('span'));
+          const companySpan = allSpans.find(s => /^(?:Perusahaan|Company)\s*/i.test((s.textContent || '').trim()));
+          if (companySpan) {
+            company = (companySpan.textContent || '')
+              .replace(/^(?:Perusahaan|Company)\s*/i, '')
+              .trim();
+          } else {
+            const h4Parent = card.querySelector('h4')?.parentElement;
+            if (h4Parent) {
+              const compCandidate = h4Parent.querySelector('span');
+              if (compCandidate) {
+                company = (compCandidate.textContent || '').replace(/^(?:Perusahaan|Company)\s*/i, '').trim();
+              }
+            }
+          }
+
+          // 3. Location
+          let location = '';
+          const locSpan = allSpans.find(s => /^(?:Lokasi|Location)\s*/i.test((s.textContent || '').trim()));
+          if (locSpan) {
+            location = (locSpan.textContent || '').replace(/^(?:Lokasi|Location)\s*/i, '').trim();
+          }
+
+          // 4. Status & Action Date
+          let rawStatus = '';
+          let actionDate = '';
+
+          const statusEl = card.querySelector('span[class*="1e2wz161o"]') ||
+                           card.querySelector('[class*="13uepok2b"] span') ||
+                           card.querySelector('[data-automation="job-status"]');
+
+          if (statusEl) {
+            rawStatus = (statusEl.textContent || '').trim();
+          }
+
+          const dateEl = card.querySelector('span[class*="1e2wz161u"]') ||
+                         card.querySelector('[class*="13uepok2b"] span:last-child');
+          if (dateEl) {
+            const clonedDate = dateEl.cloneNode(true) as HTMLElement;
+            clonedDate.querySelectorAll('.zj7sl70, [aria-hidden="true"], span').forEach(s => s.remove());
+            actionDate = (clonedDate.textContent || dateEl.textContent || '').trim();
+          }
+
+          // Normalisasi status ke format standar
+          let normalizedStatus = 'Dilamar';
+          const lowerRaw = rawStatus.toLowerCase();
+
+          if (/tidak terpilih|tidak sesuai|unsuccessful|not suitable|rejected/i.test(lowerRaw)) {
+            normalizedStatus = 'Tidak Sesuai';
+          } else if (/terpilih|shortlisted|wawancara|interview/i.test(lowerRaw)) {
+            normalizedStatus = 'Wawancara';
+          } else if (/dilihat|ditilik|viewed|review|sedang ditinjau/i.test(lowerRaw)) {
+            normalizedStatus = 'Dalam Review';
+          } else if (/terkirim|submitted|membuka situs|opened.*site/i.test(lowerRaw)) {
+            normalizedStatus = 'Dilamar';
+          } else if (rawStatus) {
+            normalizedStatus = rawStatus;
+          }
+
+          if (title || company) {
+            results.push({
+              company,
+              title,
+              status: normalizedStatus,
+              rawStatus,
+              location,
+              actionDate
+            });
+          }
+        }
+
+        return results;
+      });
+
+      if (extractedCards.length === 0) {
+        onLog(`Tidak ada kartu lamaran lagi di halaman ${pageNum}. Selesai memindai.`);
+        break;
+      }
+
+      let newCardsOnThisPage = 0;
+      for (const card of extractedCards) {
+        const uniqueKey = `${card.company}_${card.title}`.toLowerCase();
+        if (!seenKeys.has(uniqueKey)) {
+          seenKeys.add(uniqueKey);
+          allApplications.push(card);
+          newCardsOnThisPage++;
+        }
+      }
+
+      onLog(`Halaman ${pageNum}: Berhasil membaca ${extractedCards.length} kartu (${newCardsOnThisPage} kartu baru).`);
+
+      if (newCardsOnThisPage === 0) {
+        onLog(`Kartu di halaman ${pageNum} identik dengan halaman sebelumnya. Mengakhiri pemindaian.`);
+        break;
+      }
+
+      // Cek tombol pagination Next
+      const isLastPage = await page.evaluate(() => {
+        const nextLink = document.querySelector('a[rel="next"]') as HTMLAnchorElement | null;
+        if (!nextLink) return true;
+        const parentLi = nextLink.closest('li');
+        if (parentLi && parentLi.getAttribute('aria-hidden') === 'true') return true;
+        if (nextLink.getAttribute('aria-hidden') === 'true' || nextLink.getAttribute('aria-disabled') === 'true') return true;
+        return false;
+      });
+
+      // Update progres ke Google Sheets setiap 5 halaman
+      if (onBatchExtracted && pageNum % 5 === 0 && allApplications.length > 0) {
+        try {
+          await onBatchExtracted(allApplications, pageNum);
+        } catch (batchErr: any) {
+          onLog(`Kendala saat menyimpan batch progres ke Google Sheets: ${batchErr.message || batchErr}`);
+        }
+      }
+
+      if (isLastPage) {
+        onLog(`Halaman ${pageNum} adalah halaman terakhir. Selesai memindai seluruh riwayat Jobstreet.`);
+        break;
+      }
+
+      await sleep(1500);
+    } catch (pageErr: any) {
+      onLog(`Kendala saat memindai halaman ${pageNum}: ${pageErr.message || pageErr}`);
+      break;
+    }
+  }
+
+  onLog(`Total riwayat lamaran yang berhasil diekstrak dari Jobstreet: ${allApplications.length}`);
+  return allApplications;
+}
+

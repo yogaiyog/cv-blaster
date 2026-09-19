@@ -6,13 +6,13 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "concurrently -k -r \"next dev -p 3000\" \"wait-on -t 30000 tcp:3000 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:win": "npm run build && electron-builder --win"
+    "electron:build": "npm run build && cross-env NODE_OPTIONS=\"--experimental-require-module\" electron-builder",
+    "electron:build:mac": "npm run build && cross-env NODE_OPTIONS=\"--experimental-require-module\" electron-builder --mac",
+    "electron:build:win": "npm run build && cross-env NODE_OPTIONS=\"--experimental-require-module\" electron-builder --win"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

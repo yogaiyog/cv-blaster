@@ -45,8 +45,8 @@ export function cleanupStaleProfileLocks(profilePath: string) {
     ];
     for (const file of lockFiles) {
       try {
-        const filePath = path.join(profilePath, file);
-        if (fs.existsSync(filePath)) {
+        const filePath = path.join(/*turbopackIgnore: true*/ profilePath, file);
+        if (fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
           fs.unlinkSync(filePath);
         }
       } catch {}
@@ -61,12 +61,32 @@ export function cleanupStaleProfileLocks(profilePath: string) {
  * and automatically falls back to bundled Chromium if Google Chrome fails or is unavailable.
  * Both use the exact same persistent profile path (`automation-profile/`).
  */
+declare const __non_webpack_require__: any;
+
 export async function launchBrowserWithFallback(
   mode: 'headless' | 'headful' = 'headless',
   onLog?: (msg: string) => void
 ): Promise<LaunchBrowserResult> {
-  const puppeteer = require('puppeteer-extra');
-  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  let puppeteer: any;
+  let StealthPlugin: any;
+  try {
+    puppeteer = require('puppeteer-extra');
+    StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  } catch (err: any) {
+    try {
+      puppeteer = typeof __non_webpack_require__ !== 'undefined'
+        ? __non_webpack_require__('puppeteer-extra')
+        : (eval('require') as NodeRequire)('puppeteer-extra');
+      StealthPlugin = typeof __non_webpack_require__ !== 'undefined'
+        ? __non_webpack_require__('puppeteer-extra-plugin-stealth')
+        : (eval('require') as NodeRequire)('puppeteer-extra-plugin-stealth');
+    } catch (fallbackErr: any) {
+      const msg = `Gagal memuat modul otomatisasi (puppeteer-extra): ${err?.message || err}. Pastikan dependensi terpasang lengkap di instalasi aplikasi.`;
+      if (onLog) onLog(`🚨 ${msg}`);
+      throw new Error(msg);
+    }
+  }
+
   try {
     puppeteer.use(StealthPlugin());
   } catch (e) {}
@@ -87,7 +107,10 @@ export async function launchBrowserWithFallback(
     '--disable-infobars',
     '--test-type',
     '--disable-blink-features=AutomationControlled',
-    '--window-size=1280,800'
+    '--window-size=1280,800',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
   ];
 
   // Hanya tambahkan sandbox flags khusus Linux jika dijalankan di container/server Linux

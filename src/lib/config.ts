@@ -19,6 +19,8 @@ export interface AppConfig {
   enableJobstreet: boolean;
   enableLinkedin: boolean;
   enableIndeed: boolean;
+  syncGlintsStatus?: boolean;
+  syncJobstreetStatus?: boolean;
   indeedNoJobTitleFilter?: boolean;
   debugTest: boolean;
   concurrency: number;
@@ -62,6 +64,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   enableJobstreet: true,
   enableLinkedin: true,
   enableIndeed: true,
+  syncGlintsStatus: false,
+  syncJobstreetStatus: false,
   indeedNoJobTitleFilter: false,
   debugTest: false,
   concurrency: 2,

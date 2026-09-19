@@ -38,7 +38,8 @@ export async function startBot(
       onLog('ℹ️ Gemini API Key tidak diisi (Mode Offline/Tanpa AI). Pertanyaan di luar database akan dijawab dengan aturan default/pilihan pertama.');
     }
 
-    if (!config.searchKeywords && !config.indeedNoJobTitleFilter) {
+    const hasJobSearchPlatforms = config.enableGlints || config.enableJobstreet || config.enableLinkedin || config.enableIndeed;
+    if (hasJobSearchPlatforms && !config.searchKeywords && !config.indeedNoJobTitleFilter) {
       throw new Error('Search keywords are not configured. Please fill them in first.');
     }
 
@@ -257,12 +258,132 @@ export async function startBot(
       onLog('⏩ Indeed dinonaktifkan di pengaturan.');
     }
 
+    // ----------------------------------------------------
+    // TAB 5: GLINTS STATUS SYNCHRONIZATION
+    // ----------------------------------------------------
+    if (config.syncGlintsStatus) {
+      tasks.push((async () => {
+        const pageSync = await getOrNewPage();
+        await pageSync.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const syncLog = (msg: string) => onLog(`[Glints Sync] ${msg}`);
+
+        syncLog('🔄 Memulai sinkronisasi status lamaran Glints...');
+        try {
+          const { syncGlintsApplicationStatuses } = require('./bots/glints');
+          const { updateGlintsApplicationStatuses } = require('./googleSheets');
+
+          let totalSyncedUpdates = 0;
+          const allDetails: Array<{ company: string; title: string; oldStatus: string; newStatus: string }> = [];
+
+          const onBatchExtracted = async (batch: any[], pageNum: number) => {
+            if (batch.length === 0) return;
+            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke Google Sheets...`);
+            const syncRes = await updateGlintsApplicationStatuses(batch, config);
+            totalSyncedUpdates += syncRes.updatedCount;
+            if (syncRes.details.length > 0) {
+              allDetails.push(...syncRes.details);
+              for (const d of syncRes.details) {
+                syncLog(`   📌 ${d.company} - ${d.title}: "${d.oldStatus}" ➔ "${d.newStatus}"`);
+              }
+            }
+            if (syncRes.updatedCount > 0) {
+              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di Google Sheets.`);
+            } else {
+              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di Google Sheets.`);
+            }
+          };
+
+          const apps = await syncGlintsApplicationStatuses(pageSync, syncLog, 200, onBatchExtracted);
+          if (apps.length > 0) {
+            syncLog(`📊 Selesai memindai seluruh riwayat (${apps.length} kartu). Memeriksa sinkronisasi akhir...`);
+            const finalRes = await updateGlintsApplicationStatuses(apps, config);
+            totalSyncedUpdates += finalRes.updatedCount;
+            if (finalRes.details.length > 0) {
+              allDetails.push(...finalRes.details);
+              for (const d of finalRes.details) {
+                syncLog(`   📌 ${d.company} - ${d.title}: "${d.oldStatus}" ➔ "${d.newStatus}"`);
+              }
+            }
+            syncLog(
+              `✅ Selesai Sinkronisasi Glints: Total ${totalSyncedUpdates} status diperbarui (${finalRes.matchedCount} lamaran cocok).`
+            );
+          } else {
+            syncLog('ℹ️ Tidak ada kartu lamaran ditemukan di akun Glints.');
+          }
+        } catch (err: any) {
+          syncLog(`⚠️ Gagal sinkronisasi status Glints: ${err.message || err}`);
+        } finally {
+          try { await pageSync.close(); } catch {}
+        }
+      })());
+    }
+
+    // ----------------------------------------------------
+    // TAB 6: JOBSTREET STATUS SYNCHRONIZATION
+    // ----------------------------------------------------
+    if (config.syncJobstreetStatus) {
+      tasks.push((async () => {
+        const pageSync = await getOrNewPage();
+        await pageSync.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        const syncLog = (msg: string) => onLog(`[Jobstreet Sync] ${msg}`);
+
+        syncLog('🔄 Memulai sinkronisasi status lamaran Jobstreet...');
+        try {
+          const { syncJobstreetApplicationStatuses } = require('./bots/jobstreet');
+          const { updateJobstreetApplicationStatuses } = require('./googleSheets');
+
+          let totalSyncedUpdates = 0;
+          const allDetails: Array<{ company: string; title: string; oldStatus: string; newStatus: string }> = [];
+
+          const onBatchExtracted = async (batch: any[], pageNum: number) => {
+            if (batch.length === 0) return;
+            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke Google Sheets...`);
+            const syncRes = await updateJobstreetApplicationStatuses(batch, config);
+            totalSyncedUpdates += syncRes.updatedCount;
+            if (syncRes.details.length > 0) {
+              allDetails.push(...syncRes.details);
+              for (const d of syncRes.details) {
+                syncLog(`   📌 ${d.company} - ${d.title}: "${d.oldStatus}" ➔ "${d.newStatus}"`);
+              }
+            }
+            if (syncRes.updatedCount > 0) {
+              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di Google Sheets.`);
+            } else {
+              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di Google Sheets.`);
+            }
+          };
+
+          const apps = await syncJobstreetApplicationStatuses(pageSync, syncLog, 100, onBatchExtracted);
+          if (apps.length > 0) {
+            syncLog(`📊 Selesai memindai seluruh riwayat (${apps.length} kartu). Memeriksa sinkronisasi akhir...`);
+            const finalRes = await updateJobstreetApplicationStatuses(apps, config);
+            totalSyncedUpdates += finalRes.updatedCount;
+            if (finalRes.details.length > 0) {
+              allDetails.push(...finalRes.details);
+              for (const d of finalRes.details) {
+                syncLog(`   📌 ${d.company} - ${d.title}: "${d.oldStatus}" ➔ "${d.newStatus}"`);
+              }
+            }
+            syncLog(
+              `✅ Selesai Sinkronisasi Jobstreet: Total ${totalSyncedUpdates} status diperbarui (${finalRes.matchedCount} lamaran cocok).`
+            );
+          } else {
+            syncLog('ℹ️ Tidak ada kartu lamaran ditemukan di akun Jobstreet.');
+          }
+        } catch (err: any) {
+          syncLog(`⚠️ Gagal sinkronisasi status Jobstreet: ${err.message || err}`);
+        } finally {
+          try { await pageSync.close(); } catch {}
+        }
+      })());
+    }
+
     // Tunggu semua tab platform selesai bekerja
     if (tasks.length > 0) {
-      onLog(`🚀 Menjalankan ${tasks.length} tab platform secara bersamaan...`);
+      onLog(`🚀 Menjalankan ${tasks.length} tugas/tab secara bersamaan...`);
       await Promise.allSettled(tasks);
     } else {
-      onLog('⚠️ Tidak ada platform yang diaktifkan (Glints, Jobstreet, LinkedIn & Indeed semuanya nonaktif).');
+      onLog('⚠️ Tidak ada platform atau fitur pembaruan status yang diaktifkan di pengaturan.');
     }
 
     onLog('--------------------------------------------------');
