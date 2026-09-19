@@ -53,5 +53,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST() {
   global.isBotRunning = false;
+  if (global.activeBotBrowser) {
+    try {
+      await global.activeBotBrowser.close();
+    } catch {}
+    global.activeBotBrowser = null;
+  }
   return Response.json({ success: true, message: 'Bot stop signal triggered.' });
 }

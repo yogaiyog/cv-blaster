@@ -7,6 +7,8 @@ import { runIndeedBot } from './bots/indeed';
 
 declare global {
   var isBotRunning: boolean;
+  var activeBotBrowser: any;
+  var activeSetupBrowser: any;
 }
 
 export async function startBot(
@@ -40,6 +42,26 @@ export async function startBot(
       throw new Error('Search keywords are not configured. Please fill them in first.');
     }
 
+    // Close active setup browser if open to avoid userDataDir collision
+    if (global.activeSetupBrowser) {
+      onLog('ℹ️ Menutup browser sesi Login Setup yang masih terbuka...');
+      try {
+        await global.activeSetupBrowser.close();
+      } catch {}
+      global.activeSetupBrowser = null;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Close previous active bot browser if lingering
+    if (global.activeBotBrowser) {
+      onLog('ℹ️ Menutup browser sesi bot sebelumnya...');
+      try {
+        await global.activeBotBrowser.close();
+      } catch {}
+      global.activeBotBrowser = null;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
     // Test Google Sheets connection
     onLog('📊 Menguji koneksi ke Google Sheets...');
     const { testSheetsConnection } = require('./googleSheets');
@@ -55,6 +77,7 @@ export async function startBot(
     const { launchBrowserWithFallback } = require('./browserHelper');
     const launchResult = await launchBrowserWithFallback(mode as any, onLog);
     browser = launchResult.browser;
+    global.activeBotBrowser = browser;
 
     let totalSuccess = 0;
     let totalAlreadyApplied = 0;
@@ -253,12 +276,15 @@ export async function startBot(
     onLog(`🚨 Fatal Bot Error: ${error.message || error}`);
   } finally {
     if (browser) {
-      if (mode === 'headful') {
+      if (mode === 'headful' && global.isBotRunning) {
         onLog('⏳ Menunggu 5 detik sebelum menutup browser headful...');
         await new Promise(r => setTimeout(r, 5000));
       }
-      await browser.close();
+      try {
+        await browser.close();
+      } catch {}
     }
+    global.activeBotBrowser = null;
     global.isBotRunning = false;
   }
 }

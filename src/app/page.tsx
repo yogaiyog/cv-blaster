@@ -594,8 +594,19 @@ export default function Home() {
     }
   };
 
-  const executeStartBot = (mode: 'headless' | 'headful' = 'headless') => {
+  const executeStartBot = async (mode: 'headless' | 'headful' = 'headless') => {
     if (isBotRunning) return;
+
+    if (isSetupBrowserRunning) {
+      try {
+        await fetch('/api/setup-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'stop' }),
+        });
+        setIsSetupBrowserRunning(false);
+      } catch (e) {}
+    }
 
     setLogs([`[${new Date().toLocaleTimeString()}] 🚀 Menghubungkan ke Bot Engine (${mode.toUpperCase()})...`]);
     setIsBotRunning(true);

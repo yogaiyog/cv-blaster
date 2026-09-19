@@ -20,6 +20,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'No browser running' });
     }
 
+    if (global.isBotRunning) {
+      return NextResponse.json({
+        success: false,
+        error: 'Bot automasi sedang berjalan! Hentikan bot terlebih dahulu sebelum membuka Login Setup.'
+      }, { status: 400 });
+    }
+
     if (global.activeSetupBrowser) {
       return NextResponse.json({ success: false, error: 'Browser is already running. Please close it first.' }, { status: 400 });
     }

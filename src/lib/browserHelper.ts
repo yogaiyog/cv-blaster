@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { getConfig } from './config';
 
 export interface LaunchBrowserResult {
@@ -8,15 +9,46 @@ export interface LaunchBrowserResult {
 }
 
 /**
- * Removes stale Chromium/Chrome singleton lock symlinks if left over from a previous crash/close.
- * This prevents the "Failed to launch: Opening in existing browser session" error.
+ * Terminates any orphaned Chrome or Chromium processes that are actively locking the profile directory.
+ * Filters strictly by process name and command line containing the profile folder name.
+ */
+export function terminateOrphanedProfileProcesses(profilePath: string, onLog?: (msg: string) => void) {
+  const log = onLog || console.log;
+  const folderName = path.basename(profilePath) || 'automation-profile';
+
+  try {
+    if (process.platform === 'win32') {
+      const psCommand = `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'chrome.exe' -or $_.Name -eq 'chromium.exe') -and $_.CommandLine -like '*${folderName}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`;
+      execSync(psCommand, { stdio: 'ignore', timeout: 5000 });
+    } else {
+      execSync(`pkill -f "${folderName}" || true`, { stdio: 'ignore', timeout: 5000 });
+    }
+  } catch (err: any) {
+    // Non-fatal, ignore if no matching processes found
+  }
+}
+
+/**
+ * Removes stale Chromium/Chrome singleton lock symlinks and files if left over from a previous crash/close.
+ * On Windows, Chrome creates 'lockfile' which causes Puppeteer to throw:
+ * "The browser is already running for ... Use a different `userDataDir` or stop the running browser first."
  */
 export function cleanupStaleProfileLocks(profilePath: string) {
   try {
-    const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort'];
+    const lockFiles = [
+      'SingletonLock',
+      'SingletonCookie',
+      'SingletonSocket',
+      'DevToolsActivePort',
+      'lockfile',
+      'parent.lock'
+    ];
     for (const file of lockFiles) {
       try {
-        fs.unlinkSync(`${profilePath}/${file}`);
+        const filePath = path.join(profilePath, file);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       } catch {}
     }
   } catch (e) {
@@ -44,6 +76,8 @@ export async function launchBrowserWithFallback(
   const profilePath = path.join(baseDir, 'automation-profile');
   const isHeadless = mode !== 'headful';
 
+  const log = onLog || console.log;
+
   // Bersihkan stale singleton lock sebelum meluncurkan browser
   cleanupStaleProfileLocks(profilePath);
 
@@ -69,7 +103,30 @@ export async function launchBrowserWithFallback(
     defaultViewport: isHeadless ? { width: 1280, height: 800 } : null
   };
 
-  const log = onLog || console.log;
+  /**
+   * Helper to launch Puppeteer with automatic recovery if a profile conflict occurs
+   */
+  const launchWithAutoRecovery = async (options: any, label: string) => {
+    try {
+      cleanupStaleProfileLocks(profilePath);
+      return await puppeteer.launch(options);
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (
+        errMsg.includes('already running') ||
+        errMsg.includes('ProcessSingleton') ||
+        errMsg.includes('lockfile')
+      ) {
+        log(`⚠️ Terdeteksi sesi browser lama masih aktif atau lockfile tertinggal. Membersihkan proses & me-reset lock...`);
+        terminateOrphanedProfileProcesses(profilePath, log);
+        await new Promise((r) => setTimeout(r, 1200));
+        cleanupStaleProfileLocks(profilePath);
+        log(`🔄 Mencoba meluncurkan kembali ${label}...`);
+        return await puppeteer.launch(options);
+      }
+      throw err;
+    }
+  };
 
   // ----------------------------------------------------
   // ATTEMPT 1: Official Google Chrome (System Chrome)
@@ -88,8 +145,7 @@ export async function launchBrowserWithFallback(
 
     try {
       log(`🌐 Mencoba meluncurkan ${targetLabel}...`);
-      cleanupStaleProfileLocks(profilePath);
-      const browser = await puppeteer.launch(chromeOptions);
+      const browser = await launchWithAutoRecovery(chromeOptions, targetLabel);
       const version = await browser.version().catch(() => 'Unknown');
       log(`✅ Berhasil membuka ${targetLabel} [${version}]`);
       return {
@@ -108,8 +164,7 @@ export async function launchBrowserWithFallback(
   // ----------------------------------------------------
   try {
     log(`🌐 Meluncurkan Chromium Bawaan (Bundled Chromium)...`);
-    cleanupStaleProfileLocks(profilePath);
-    const browser = await puppeteer.launch(baseOptions);
+    const browser = await launchWithAutoRecovery(baseOptions, 'Chromium Bawaan');
     const version = await browser.version().catch(() => 'Unknown');
     log(`✅ Berhasil membuka Chromium Bawaan [${version}]`);
     return {
