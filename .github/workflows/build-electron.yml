@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - master
+    tags:
+      - 'v*'
 
 jobs:
   build-windows:
@@ -26,6 +28,8 @@ jobs:
 
       - name: Build Next.js & Windows Installer
         run: npm run electron:build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows Artifact (.exe)
         uses: actions/upload-artifact@v4
@@ -52,6 +56,8 @@ jobs:
 
       - name: Build Next.js & macOS Installer
         run: npm run electron:build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS Artifact (.dmg)
         uses: actions/upload-artifact@v4
@@ -59,3 +65,56 @@ jobs:
           name: CV-Blaster-macOS-Installer
           path: dist-electron/*.dmg
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Determine Release Tag
+        id: get_tag
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            TAG="v$VERSION"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download Windows Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: CV-Blaster-Windows-Installer
+          path: release-assets/win
+
+      - name: Download macOS Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: CV-Blaster-macOS-Installer
+          path: release-assets/mac
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          name: Release ${{ steps.get_tag.outputs.tag }}
+          files: |
+            release-assets/win/*.exe
+            release-assets/mac/*.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
