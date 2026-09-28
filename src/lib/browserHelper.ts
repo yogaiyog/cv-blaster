@@ -105,7 +105,6 @@ export async function launchBrowserWithFallback(
     '--no-default-browser-check',
     '--no-first-run',
     '--disable-infobars',
-    '--test-type',
     '--disable-blink-features=AutomationControlled',
     '--window-size=1280,800',
     '--disable-background-timer-throttling',
