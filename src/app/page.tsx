@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 
 interface AppConfig {
-  spreadsheetId: string;
-  sheetName: string;
+  spreadsheetId?: string;
+  sheetName?: string;
   questionsSheetName?: string;
-  googleCredentialsJson: string;
+  googleCredentialsJson?: string;
   searchKeywords: string;
   location: string;
   minSalary: string;
@@ -50,6 +50,9 @@ interface AppliedJob {
   jobUrl: string;
   date: string;
   status: string;
+  matchScore?: string;
+  matchReason?: string;
+  note?: string;
 }
 
 interface QuestionItem {
@@ -64,10 +67,6 @@ interface QuestionItem {
 const STORAGE_KEY = 'cv_blaster_config_v1';
 
 const EMPTY_CONFIG: AppConfig = {
-  spreadsheetId: '',
-  sheetName: 'Sheet1',
-  questionsSheetName: 'Sheet2',
-  googleCredentialsJson: '',
   geminiApiKey: '',
   searchKeywords: '',
   location: '',
@@ -81,7 +80,7 @@ const EMPTY_CONFIG: AppConfig = {
   enableGlints: true,
   enableJobstreet: true,
   enableLinkedin: true,
-  enableIndeed: true,
+  enableIndeed: false,
   syncGlintsStatus: false,
   syncJobstreetStatus: false,
   indeedNoJobTitleFilter: false,
@@ -107,7 +106,6 @@ interface RoleTemplate {
   id: string;
   name: string;
   category: string;
-  icon: string;
   badgeColor: string;
   searchKeywords: string;
   skills: string;
@@ -122,8 +120,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'fullstack',
     name: 'Fullstack Developer',
     category: 'Software Engineering & IT',
-    icon: '💻',
-    badgeColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
     searchKeywords: 'Fullstack Developer, Frontend Developer, Backend Developer, Software Engineer, Web Developer, React Developer, Node.js Developer',
     skills: "JavaScript, TypeScript, Python, Java, C#, C++, PHP, Go, HTML, CSS, React, React.js, Next.js, Angular, Angular.js, Vue.js, Tailwind CSS, Bootstrap, jQuery, Framer Motion, Three.js, Node.js, Express.js, NestJS, Fiber, Laravel, Django, FastAPI, Spring Boot, REST API, RESTful API, GraphQL, Redis, RabbitMQ, Kafka, Celery, Asynq, Message Queue, PostgreSQL, MySQL, Supabase, Prisma, MongoDB, SQL, Docker, Nginx, PM2, Git, GitHub, GitHub Actions, CI/CD, Postman, VS Code, Full Stack Development, Backend Development, Frontend Development, Web Development, API Development, Database Design, Microservices, Object-Oriented Programming, Asynchronous Programming, Agile, Scrum, Problem Solving, Debugging",
     educationLevel: 'Sarjana (S1)',
@@ -135,8 +132,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'finance',
     name: 'Finance & Accounting',
     category: 'Keuangan, Akuntansi & Pajak',
-    icon: '📊',
-    badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     searchKeywords: 'Finance, Accounting, Staf Keuangan, Finance Officer, Accounting Staff, Staf Pajak, Tax Specialist, Auditor, Financial Analyst, Treasury',
     skills: "Microsoft Excel, Advanced Excel, VLOOKUP, HLOOKUP, XLOOKUP, Pivot Table, INDEX MATCH, Financial Reporting, Laporan Keuangan, Laporan Laba Rugi, Neraca, Bookkeeping, Jurnal Umum, Jurnal Penyesuaian, Akuntansi, General Ledger, Buku Besar, Tax, Pajak, PPh 21, PPh 23, PPh 4 ayat 2, PPh 25, PPN, e-Faktur, e-SPT, DJP Online, Brevet A & B, Accurate, Accurate Online, Zahir Accounting, SAP, SAP ERP, MYOB, Jurnal by Mekari, Cash Flow Management, Manajemen Arus Kas, Budgeting, Anggaran, Financial Planning, Invoicing, Faktur, Petty Cash, Kas Kecil, Bank Reconciliation, Rekonsiliasi Bank, Audit Keuangan, Internal Audit, Cost Accounting, Akuntansi Biaya, Financial Modeling, Analytical Thinking, Problem Solving, Kepatuhan Pajak",
     educationLevel: 'Sarjana (S1)',
@@ -148,8 +144,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'digital_marketing',
     name: 'Digital Marketing',
     category: 'Pemasaran, Ads & Social Media',
-    icon: '📱',
-    badgeColor: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+    badgeColor: 'bg-pink-50 text-pink-700 border-pink-200',
     searchKeywords: 'Digital Marketing, Performance Marketing, Social Media Specialist, SEO Specialist, Content Creator, Copywriter, SEM Specialist, Brand Marketing, Marketing Communication',
     skills: "Meta Ads, Facebook Ads, Instagram Ads, Google Ads, Google Search Ads, TikTok Ads, TikTok Shop, TikTok Affiliate, SEO, Search Engine Optimization, On-Page SEO, Off-Page SEO, Keyword Research, SEM, Google Analytics, GA4, Google Tag Manager, Google Search Console, Copywriting, Content Marketing, Content Writing, Content Strategy, Social Media Marketing, Social Media Management, Instagram Marketing, LinkedIn Marketing, Email Marketing, Mailchimp, CRM, Canva, CapCut, Adobe Photoshop, Adobe Premiere, Video Editing, Influencer Marketing, KOL Management, Market Research, Branding, A/B Testing, Conversion Rate Optimization (CRO), ROI & ROAS Optimization, Creative Campaign Strategy",
     educationLevel: 'Sarjana (S1)',
@@ -161,8 +156,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'guru',
     name: 'Guru & Tenaga Pengajar',
     category: 'Pendidikan, Bimbel & Pelatihan',
-    icon: '🎓',
-    badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
     searchKeywords: 'Guru, Pengajar, Teacher, Tutor, Instruktur, Dosen, Tenaga Pendidik, Academic Coordinator, Education Specialist, Guru Bimbel',
     skills: "Kurikulum Merdeka, Kurikulum 2013 (K13), Rencana Pelaksanaan Pembelajaran (RPP), Modul Ajar, Silabus, Manajemen Kelas, Classroom Management, Metode Pembelajaran Interaktif, Active Learning, Pembuatan Soal, Asesmen Pembelajaran, Penilaian Siswa, Asesmen Diagnostik & Formatif, Microsoft PowerPoint, Canva for Education, Google Classroom, Google Workspace for Education, Zoom, Media Pembelajaran Digital, Bimbingan Konseling, Public Speaking, Komunikasi Efektif, Edukasi Anak, Pedagogik, Lesson Planning, Mentoring, Pembelajaran Daring & Luring, Evaluasi Pembelajaran, Student Engagement, Karakter Siswa",
     educationLevel: 'Sarjana (S1)',
@@ -174,8 +168,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'data_analyst',
     name: 'Data Analis',
     category: 'Data & Business Intelligence',
-    icon: '📈',
-    badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
     searchKeywords: 'Data Analyst, Business Intelligence, BI Analyst, Data Scientist, Data Specialist, Junior Data Analyst, Analytics Specialist, Reporting Analyst',
     skills: "SQL, PostgreSQL, MySQL, Microsoft SQL Server, BigQuery, Snowflake, Python, Pandas, NumPy, Data Visualization, Visualisasi Data, Tableau, Power BI, Google Looker Studio, Metabase, Microsoft Excel, Advanced Excel, Pivot Tables, Power Query, Statistics, Statistika, Data Cleaning, Pembersihan Data, ETL, Data Wrangling, Business Intelligence, Dashboard Design, Business Reporting, A/B Testing, Exploratory Data Analysis (EDA), Data Modeling, Statistical Modeling, Analytical Thinking, Problem Solving, Storytelling with Data, KPI Tracking",
     educationLevel: 'Sarjana (S1)',
@@ -187,8 +180,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'qa',
     name: 'QA (Quality Assurance)',
     category: 'Software Testing & Automation',
-    icon: '🧪',
-    badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
     searchKeywords: 'QA Engineer, Quality Assurance, Software Tester, QA Tester, Manual Tester, Automation QA, Test Engineer, Software Quality Assurance',
     skills: "Manual Testing, Automation Testing, Pengujian Perangkat Lunak, Test Case Design, Desain Test Case, Test Scenarios, Test Plan, Bug Tracking, Pelaporan Bug, Jira, Trello, ClickUp, Postman, API Testing, REST API, Cypress, Selenium, Playwright, Appium, Mobile Testing, JMeter, Performance Testing, Regression Testing, Smoke Testing, Sanity Testing, Black Box Testing, White Box Testing, User Acceptance Testing (UAT), Git, CI/CD, TestRail, Zephyr, Agile, Scrum, SQL, Basic JavaScript/TypeScript, Problem Solving, Analytical Mindset",
     educationLevel: 'Sarjana (S1)',
@@ -200,8 +192,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'devops',
     name: 'DevOps & Cloud Engineer',
     category: 'Cloud, Infrastructure & CI/CD',
-    icon: '⚡',
-    badgeColor: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+    badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
     searchKeywords: 'DevOps Engineer, Cloud Engineer, Site Reliability Engineer, SRE, System Administrator, Infrastructure Engineer, Platform Engineer',
     skills: "Linux, Ubuntu, Debian, CentOS, Bash Scripting, Shell Scripting, Docker, Docker Compose, Containerization, Kubernetes, K8s, Helm, CI/CD, CI/CD Pipelines, GitHub Actions, GitLab CI, Jenkins, AWS, Amazon Web Services, EC2, S3, RDS, Lambda, GCP, Google Cloud Platform, Microsoft Azure, Terraform, Infrastructure as Code (IaC), Ansible, Nginx, Reverse Proxy, Apache, Prometheus, Grafana, ELK Stack, Elasticsearch, Logstash, Kibana, Datadog, SSL/TLS, Let's Encrypt, Cloudflare, Git, Networking, DNS, TCP/IP, Security Best Practices, Microservices Architecture, Disaster Recovery",
     educationLevel: 'Sarjana (S1)',
@@ -213,8 +204,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     id: 'project_manager',
     name: 'Project Manager',
     category: 'Manajemen Proyek, Agile & Scrum',
-    icon: '📋',
-    badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     searchKeywords: 'Project Manager, PM, IT Project Manager, Scrum Master, Product Manager, Product Owner, Project Coordinator, Agile Project Manager',
     skills: "Project Management, Manajemen Proyek, Agile, Scrum, Kanban, Sprint Planning, Sprint Review, Daily Standup, Backlog Grooming, Sprint Retrospective, Jira, Jira Software, Confluence, Trello, ClickUp, Asana, Notion, Microsoft Project, Scope Management, Risk Management, Stakeholder Management, Budgeting, Anggaran Proyek, Resource Allocation, Timeline Management, Gantt Chart, Product Roadmap, User Stories, Acceptance Criteria, SDLC, Cross-functional Team Leadership, Problem Solving, Communication, Negotiation, Presentation, OKRs, KPIs, Vendor Management",
     educationLevel: 'Sarjana (S1)',
@@ -235,15 +225,10 @@ export default function Home() {
   const [isSetupBrowserRunning, setIsSetupBrowserRunning] = useState(false);
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [sheetsWarning, setSheetsWarning] = useState<{
-    open: boolean;
-    error: string;
-    mode: 'headless' | 'headful';
-  } | null>(null);
 
-  // Question Sheets state
+  // Question Local Storage state
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
-  const [questionsSource, setQuestionsSource] = useState<'google_sheets' | 'local_csv'>('local_csv');
+  const [questionsSource, setQuestionsSource] = useState<'local_storage'>('local_storage');
   const [questionSearch, setQuestionSearch] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<QuestionItem | null>(null);
   const [isNewQuestionModalOpen, setIsNewQuestionModalOpen] = useState(false);
@@ -260,8 +245,6 @@ export default function Home() {
   const [importMode, setImportMode] = useState<'text' | 'file'>('text');
   const [importError, setImportError] = useState<string | null>(null);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [isSheetsTutorialOpen, setIsSheetsTutorialOpen] = useState(false);
-  const [activeTutorialStep, setActiveTutorialStep] = useState(1);
 
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateApplyOptions, setTemplateApplyOptions] = useState({
@@ -287,7 +270,7 @@ export default function Home() {
     setIsTemplateModalOpen(false);
     setSaveStatus({
       type: 'success',
-      message: `✅ Template "${role.name}" berhasil diterapkan! Jangan lupa klik Simpan Konfigurasi / Profil.`
+      message: `Template "${role.name}" berhasil diterapkan.`
     });
   };
 
@@ -300,7 +283,7 @@ export default function Home() {
     const initialize = async () => {
       let activeConfig = config;
 
-      // 1. Fetch server config (has spreadsheetId & credentials if configured)
+      // 1. Fetch server config
       try {
         const res = await fetch('/api/config');
         if (res.ok) {
@@ -325,21 +308,14 @@ export default function Home() {
         }
       } catch {}
 
-      // 3. Auto-migrate legacy 'Screening Questions' default to 'Sheet2'
-      if (!activeConfig.questionsSheetName || activeConfig.questionsSheetName === 'Screening Questions') {
-        activeConfig.questionsSheetName = 'Sheet2';
-      }
-      if (!activeConfig.sheetName) {
-        activeConfig.sheetName = 'Sheet1';
-      }
-
+      activeConfig.enableIndeed = false;
       setConfig(activeConfig);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(activeConfig));
       } catch {}
 
-      fetchQuestions(activeConfig);
-      fetchAppliedHistory(activeConfig);
+      fetchQuestions();
+      fetchAppliedHistory();
     };
 
     initialize();
@@ -352,7 +328,7 @@ export default function Home() {
   // Save to localStorage on any config modification
   useEffect(() => {
     try {
-      if (config.spreadsheetId || config.googleCredentialsJson || config.searchKeywords) {
+      if (config.searchKeywords || config.fullName || config.location || config.minSalary) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
       }
     } catch {}
@@ -365,18 +341,57 @@ export default function Home() {
     }
   }, [logs]);
 
-  const fetchQuestions = async (cfg?: AppConfig) => {
-    const targetConfig = cfg || config;
+  const fetchQuestions = async () => {
     try {
-      const queryParam = encodeURIComponent(JSON.stringify(targetConfig));
-      const res = await fetch(`/api/questions?config=${queryParam}`);
+      const res = await fetch('/api/questions');
       const data = await res.json();
       if (data.success) {
         setQuestions(data.questions || []);
-        if (data.source) setQuestionsSource(data.source);
       }
     } catch (e) {
       console.error('Error loading questions', e);
+    }
+  };
+
+  const handleExportAppliedJobsCsv = () => {
+    window.open('/api/storage/export', '_blank');
+  };
+
+  const handleImportAppliedJobsCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch('/api/storage/import', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        fetchAppliedHistory();
+      } else {
+        alert(`Gagal impor: ${data.error}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi error saat mengimpor: ${err.message || err}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleClearAppliedHistory = async () => {
+    if (!confirm('Apakah Anda yakin ingin mengosongkan semua riwayat lamaran yang tersimpan di komputer?')) return;
+    try {
+      const res = await fetch('/api/applied', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setAppliedJobs([]);
+        alert('Riwayat lamaran berhasil dikosongkan.');
+      }
+    } catch (err: any) {
+      alert(`Gagal mengosongkan riwayat: ${err.message || err}`);
     }
   };
 
@@ -449,11 +464,9 @@ export default function Home() {
     }
   };
 
-  const fetchAppliedHistory = async (cfg?: AppConfig) => {
-    const targetConfig = cfg || config;
+  const fetchAppliedHistory = async () => {
     try {
-      const queryParam = encodeURIComponent(JSON.stringify(targetConfig));
-      const res = await fetch(`/api/applied?config=${queryParam}`);
+      const res = await fetch('/api/applied');
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
@@ -493,15 +506,15 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        setSaveStatus({ type: 'success', message: '✅ Konfigurasi tersimpan di LocalStorage & Server!' });
+        setSaveStatus({ type: 'success', message: 'Konfigurasi berhasil disimpan.' });
         setTimeout(() => setSaveStatus(null), 4000);
-        fetchAppliedHistory(config);
-        fetchQuestions(config);
+        fetchAppliedHistory();
+        fetchQuestions();
       } else {
-        setSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan konfigurasi' });
+        setSaveStatus({ type: 'error', message: data.error || 'Gagal menyimpan konfigurasi.' });
       }
     } catch (err: any) {
-      setSaveStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan' });
+      setSaveStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan.' });
     } finally {
       setIsSavingConfig(false);
     }
@@ -534,9 +547,9 @@ export default function Home() {
       });
       setIsImportModalOpen(false);
       setImportJsonText('');
-      alert('✅ Konfigurasi berhasil diimpor!');
-      fetchAppliedHistory(merged);
-      fetchQuestions(merged);
+      alert('Konfigurasi berhasil diimpor.');
+      fetchAppliedHistory();
+      fetchQuestions();
     } catch (err: any) {
       setImportError(err.message || 'Format JSON tidak valid.');
     }
@@ -556,7 +569,7 @@ export default function Home() {
   };
 
   const handleResetConfig = async () => {
-    if (!confirm('Apakah Anda yakin ingin mengosongkan semua data konfigurasi dan profil (Reset ke awal onboarding)?')) {
+    if (!confirm('Apakah Anda yakin ingin mengosongkan semua data konfigurasi dan profil?')) {
       return;
     }
     try {
@@ -568,9 +581,9 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanConfig),
       });
-      alert('✅ Semua data konfigurasi dan profil berhasil dikosongkan!');
-      fetchQuestions(cleanConfig);
-      fetchAppliedHistory(cleanConfig);
+      alert('Semua data konfigurasi dan profil berhasil direset.');
+      fetchQuestions();
+      fetchAppliedHistory();
     } catch (e: any) {
       alert(`Error: ${e.message}`);
     }
@@ -598,7 +611,7 @@ export default function Home() {
     }
   };
 
-  const executeStartBot = async (mode: 'headless' | 'headful' = 'headless') => {
+  const executeStartBot = async () => {
     if (isBotRunning) return;
 
     if (isSetupBrowserRunning) {
@@ -612,12 +625,12 @@ export default function Home() {
       } catch (e) {}
     }
 
-    setLogs([`[${new Date().toLocaleTimeString()}] 🚀 Menghubungkan ke Bot Engine (${mode.toUpperCase()})...`]);
+    setLogs([`[${new Date().toLocaleTimeString()}] [INFO] Menghubungkan ke Bot Engine...`]);
     setIsBotRunning(true);
     setActiveTab('logs');
 
     const configParam = encodeURIComponent(JSON.stringify(config));
-    const eventSource = new EventSource(`/api/run-bot?mode=${mode}&config=${configParam}`);
+    const eventSource = new EventSource(`/api/run-bot?mode=headful&config=${configParam}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
@@ -633,13 +646,13 @@ export default function Home() {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 🔌 Connection closed.`]);
       setIsBotRunning(false);
       eventSource.close();
-      fetchAppliedHistory(config);
+      fetchAppliedHistory();
     };
   };
 
-  const handleStartBot = (mode: 'headless' | 'headful' = 'headless') => {
+  const handleStartBot = () => {
     if (isBotRunning) return;
-    executeStartBot(mode);
+    executeStartBot();
   };
 
   const handleStopBot = async () => {
@@ -655,7 +668,7 @@ export default function Home() {
       console.error('Failed to send stop signal:', e);
     }
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 🛑 Bot execution stopped manually.`]);
-    fetchAppliedHistory(config);
+    fetchAppliedHistory();
   };
 
   const handleCleanCsv = async () => {
@@ -667,37 +680,43 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🧼 ${data.message} (${data.count} pertanyaan unik tersimpan)`);
+        alert(`${data.message} (${data.count} pertanyaan unik tersimpan).`);
         fetchQuestions();
       } else {
-        alert(`❌ Gagal membersihkan duplikat: ${data.error || data.message}`);
+        alert(`Gagal membersihkan duplikat: ${data.error || data.message}`);
       }
     } catch (error: any) {
-      alert(`❌ Error: ${error.message}`);
+      alert(`Error: ${error.message}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-950 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <header className="border-b border-slate-200 bg-white/95 backdrop-blur-sm sticky top-0 z-30 px-6 py-3.5 flex flex-col md:flex-row justify-between items-center gap-4 shadow-xs">
         <div className="flex items-center gap-3">
-          <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-            CV Blaster Dashboard
-          </span>
-          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-            v1.0 (Glints, Jobstreet, LinkedIn, Indeed)
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              CV Blaster
+            </span>
+            <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200 font-medium">
+              v2.0
+            </span>
+          </div>
+          <span className="hidden sm:inline-block text-xs text-slate-400 font-normal">
+            Glints • Jobstreet • LinkedIn
           </span>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Setup Browser Button */}
           <button
+            type="button"
             onClick={handleToggleSetupBrowser}
-            className={`px-4 py-2 rounded text-sm font-semibold transition ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer shadow-xs ${
               isSetupBrowserRunning
-                ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'
             }`}
           >
             {isSetupBrowserRunning ? 'Tutup Browser Setup' : 'Buka Browser (Login Setup)'}
@@ -706,88 +725,77 @@ export default function Home() {
           {/* Bot Control Button */}
           {isBotRunning ? (
             <button
+              type="button"
               onClick={handleStopBot}
-              className="px-5 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm transition"
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors duration-150 shadow-xs cursor-pointer flex items-center gap-2"
             >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
               Hentikan Bot
             </button>
           ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleStartBot('headless')}
-                disabled={isSetupBrowserRunning}
-                className={`px-4 py-2 rounded font-semibold text-sm transition ${
-                  isSetupBrowserRunning
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
-              >
-                Jalankan (Headless)
-              </button>
-              <button
-                onClick={() => handleStartBot('headful')}
-                disabled={isSetupBrowserRunning}
-                className={`px-4 py-2 rounded font-semibold text-sm transition ${
-                  isSetupBrowserRunning
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-teal-600 hover:bg-teal-700 text-white'
-                }`}
-              >
-                Jalankan (Headful)
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleStartBot}
+              disabled={isSetupBrowserRunning}
+              className={`px-4 py-2 rounded-lg font-semibold text-xs transition-colors duration-150 shadow-xs cursor-pointer flex items-center gap-2 ${
+                isSetupBrowserRunning
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              }`}
+            >
+              Jalankan Bot
+            </button>
           )}
         </div>
       </header>
 
       {/* Main Grid */}
-      <main className="max-w-7xl mx-auto p-6">
+      <main className="max-w-7xl mx-auto p-4 md:p-6">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-800 mb-6 flex-wrap">
+        <div className="flex border-b border-slate-200 mb-6 flex-wrap gap-1">
           <button
+            type="button"
             onClick={() => setActiveTab('config')}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+            className={`px-4 py-2.5 font-medium text-xs rounded-t-lg transition-colors duration-150 cursor-pointer border-b-2 -mb-px ${
               activeTab === 'config'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600 font-semibold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             Konfigurasi
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('profile')}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+            className={`px-4 py-2.5 font-medium text-xs rounded-t-lg transition-colors duration-150 cursor-pointer border-b-2 -mb-px ${
               activeTab === 'profile'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600 font-semibold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             Profil Pelamar
           </button>
           <button
+            type="button"
             onClick={() => {
               setActiveTab('questions');
               fetchQuestions();
             }}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 flex items-center gap-2 ${
+            className={`px-4 py-2.5 font-medium text-xs rounded-t-lg transition-colors duration-150 cursor-pointer border-b-2 -mb-px ${
               activeTab === 'questions'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600 font-semibold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             Database Pertanyaan
-            {config.googleCredentialsJson && config.spreadsheetId && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Cloud Sync
-              </span>
-            )}
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('logs')}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 flex items-center gap-2 ${
+            className={`px-4 py-2.5 font-medium text-xs rounded-t-lg transition-colors duration-150 cursor-pointer border-b-2 -mb-px flex items-center gap-2 ${
               activeTab === 'logs'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600 font-semibold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             Live Logs
@@ -799,14 +807,15 @@ export default function Home() {
             )}
           </button>
           <button
+            type="button"
             onClick={() => {
               setActiveTab('history');
               fetchAppliedHistory();
             }}
-            className={`px-5 py-3 font-medium text-sm transition border-b-2 ${
+            className={`px-4 py-2.5 font-medium text-xs rounded-t-lg transition-colors duration-150 cursor-pointer border-b-2 -mb-px ${
               activeTab === 'history'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600 font-semibold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             Riwayat Lamaran
@@ -814,166 +823,150 @@ export default function Home() {
         </div>
 
         {/* Tab Contents */}
-        <div className="bg-slate-950 rounded-lg border border-slate-800 p-6 shadow-xl">
+        <div className="bg-white rounded-xl border border-slate-200 p-5 md:p-6 shadow-xs">
           {/* TAB 1: CONFIGURATION */}
           {activeTab === 'config' && (
             <form onSubmit={handleSaveConfig} className="space-y-6">
-              <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
-                Pilihan Platform
-              </h2>
-              <div className="flex gap-6 items-center py-2 flex-wrap">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.enableGlints}
-                    onChange={(e) => setConfig({ ...config, enableGlints: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Aktifkan Glints</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.enableJobstreet}
-                    onChange={(e) => setConfig({ ...config, enableJobstreet: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-purple-600 focus:ring-purple-500"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Aktifkan Jobstreet</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.enableLinkedin}
-                    onChange={(e) => setConfig({ ...config, enableLinkedin: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-sky-600 focus:ring-sky-500"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Aktifkan LinkedIn</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.enableIndeed}
-                    onChange={(e) => setConfig({ ...config, enableIndeed: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Aktifkan Indeed</span>
-                </label>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2.5">
+                  Pilihan Platform
+                </h2>
+                <div className="flex gap-5 items-center py-3 flex-wrap">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.enableGlints}
+                      onChange={(e) => setConfig({ ...config, enableGlints: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Aktifkan Glints</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.enableJobstreet}
+                      onChange={(e) => setConfig({ ...config, enableJobstreet: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Aktifkan Jobstreet</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.enableLinkedin}
+                      onChange={(e) => setConfig({ ...config, enableLinkedin: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">Aktifkan LinkedIn</span>
+                  </label>
 
-                {/* Separator */}
-                <div className="h-5 w-px bg-slate-800 hidden md:block"></div>
+                  {/* Separator */}
+                  <div className="h-4 w-px bg-slate-200 hidden md:block"></div>
 
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.debugTest}
-                    onChange={(e) => setConfig({ ...config, debugTest: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-amber-500 focus:ring-amber-500"
-                  />
-                  <span className="text-sm font-medium text-amber-400 font-semibold">Debug Mode (Simulasi / Tanpa Submit)</span>
-                </label>
+                  <label className="flex items-center gap-2 cursor-pointer bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                    <input
+                      type="checkbox"
+                      checked={config.debugTest}
+                      onChange={(e) => setConfig({ ...config, debugTest: e.target.checked })}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-xs font-medium text-amber-800">Debug Mode (Simulasi / Tanpa Submit)</span>
+                  </label>
+                </div>
               </div>
 
               {/* Update Status Lamaran */}
               <div>
-                <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
+                <h2 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2.5">
                   Update Status Lamaran
                 </h2>
-                <div className="flex gap-6 items-center py-2 flex-wrap">
-                  <label className="flex items-center gap-2.5 cursor-pointer">
+                <div className="flex gap-5 items-center py-3 flex-wrap">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={config.syncGlintsStatus || false}
                       onChange={(e) => setConfig({ ...config, syncGlintsStatus: e.target.checked })}
-                      className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-cyan-500 focus:ring-cyan-500"
+                      className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                     />
-                    <span className="text-sm font-medium text-slate-300">Update Status Glints</span>
+                    <span className="text-xs font-medium text-slate-700">Update Status Glints</span>
                   </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={config.syncJobstreetStatus || false}
                       onChange={(e) => setConfig({ ...config, syncJobstreetStatus: e.target.checked })}
-                      className="w-4 h-4 rounded bg-slate-900 border-slate-800 text-purple-500 focus:ring-purple-500"
+                      className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                     />
-                    <span className="text-sm font-medium text-slate-300">Update Status Jobstreet</span>
+                    <span className="text-xs font-medium text-slate-700">Update Status Jobstreet</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2 flex-wrap gap-2">
-                <h2 className="text-lg font-semibold text-slate-200">
-                  Filter Pencarian
-                </h2>
-                <label className="flex items-center gap-2 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition">
-                  <input
-                    type="checkbox"
-                    checked={config.indeedNoJobTitleFilter || false}
-                    onChange={(e) => setConfig({ ...config, indeedNoJobTitleFilter: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <span className="text-xs font-semibold text-emerald-400">
-                    Indeed: Cari Semua Loker (Tanpa Filter Judul)
-                  </span>
-                </label>
-              </div>
+              <div>
+                <div className="border-b border-slate-200 pb-2.5">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Filter Pencarian
+                  </h2>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Kata Kunci Pekerjaan
-                  </label>
-                  <input
-                    type="text"
-                    required={!config.indeedNoJobTitleFilter}
-                    placeholder="Contoh: React Developer, Node JS, Frontend"
-                    value={config.searchKeywords}
-                    onChange={(e) => setConfig({ ...config, searchKeywords: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Lokasi Kerja
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Jakarta, Remote"
-                    value={config.location}
-                    onChange={(e) => setConfig({ ...config, location: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Worker Konkuren
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    max={10}
-                    value={config.concurrency}
-                    onChange={(e) => setConfig({ ...config, concurrency: parseInt(e.target.value) || 3 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                      Kata Kunci Pekerjaan
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: React Developer, Node JS, Frontend"
+                      value={config.searchKeywords}
+                      onChange={(e) => setConfig({ ...config, searchKeywords: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                      Lokasi Kerja
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Jakarta, Remote"
+                      value={config.location}
+                      onChange={(e) => setConfig({ ...config, location: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                      Worker Konkuren
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      max={10}
+                      value={config.concurrency}
+                      onChange={(e) => setConfig({ ...config, concurrency: parseInt(e.target.value) || 3 })}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Skema Limit Per Day / Per Platform */}
-              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-200">Pengaturan Kuota Harian</h3>
-                    <p className="text-xs text-slate-400">Pembagian kuota lamaran per hari.</p>
+                    <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">Pengaturan Kuota Harian</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Pembagian batas kuota lamaran per hari.</p>
                   </div>
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
+                  <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setConfig({ ...config, limitMode: 'shared' })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
                         (config.limitMode || 'shared') === 'shared'
-                          ? 'bg-blue-600 text-white shadow'
-                          : 'text-slate-400 hover:text-slate-200'
+                          ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       Kuota Gabungan
@@ -981,10 +974,10 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => setConfig({ ...config, limitMode: 'per_platform' })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
                         config.limitMode === 'per_platform'
-                          ? 'bg-purple-600 text-white shadow'
-                          : 'text-slate-400 hover:text-slate-200'
+                          ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       Kuota Per-Platform
@@ -996,7 +989,7 @@ export default function Home() {
                   <div>
                     <div className="flex items-center gap-3">
                       <div className="w-48">
-                        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
                           Total Limit Gabungan
                         </label>
                         <input
@@ -1005,18 +998,18 @@ export default function Home() {
                           min={1}
                           value={config.limitPerDay}
                           onChange={(e) => setConfig({ ...config, limitPerDay: parseInt(e.target.value) || 0 })}
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold text-xs"
                         />
                       </div>
-                      <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-400">
-                        Total gabungan maksimal <b>{config.limitPerDay} lamaran</b> untuk semua platform.
+                      <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-600">
+                        Total gabungan maksimal <b>{config.limitPerDay} lamaran</b> untuk semua portal aktif.
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                     <div>
-                      <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1">
                         Limit Glints
                       </label>
                       <input
@@ -1024,11 +1017,11 @@ export default function Home() {
                         min={1}
                         value={config.limitGlints || 80}
                         onChange={(e) => setConfig({ ...config, limitGlints: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-bold"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-purple-400 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wider mb-1">
                         Limit Jobstreet
                       </label>
                       <input
@@ -1036,11 +1029,11 @@ export default function Home() {
                         min={1}
                         value={config.limitJobstreet || 75}
                         onChange={(e) => setConfig({ ...config, limitJobstreet: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 font-bold"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-sky-400 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-semibold text-sky-700 uppercase tracking-wider mb-1">
                         Limit LinkedIn
                       </label>
                       <input
@@ -1048,91 +1041,21 @@ export default function Home() {
                         min={1}
                         value={config.limitLinkedin || 50}
                         onChange={(e) => setConfig({ ...config, limitLinkedin: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500 font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-                        Limit Indeed
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={config.limitIndeed || 50}
-                        onChange={(e) => setConfig({ ...config, limitIndeed: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-bold"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold text-xs"
                       />
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Pengaturan Mesin Browser (Google Chrome / Fallback) */}
-              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-200">Mesin Browser</h3>
-                    <p className="text-xs text-slate-400">Pilih browser untuk menjalankan bot dan setup login.</p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setConfig({ ...config, useSystemChrome: true })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                        config.useSystemChrome !== false
-                          ? 'bg-emerald-600 text-white shadow'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Google Chrome Asli
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfig({ ...config, useSystemChrome: false })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                        config.useSystemChrome === false
-                          ? 'bg-amber-600 text-white shadow'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Chromium Bawaan
-                    </button>
-                  </div>
-                </div>
-
-                {config.useSystemChrome !== false ? (
-                  <div className="space-y-2 text-xs text-slate-300">
-                    <p className="text-slate-400">
-                      Prioritas utama Google Chrome resmi sistem dengan fallback otomatis ke Chromium bawaan.
-                    </p>
-                    <div className="pt-1">
-                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                        Custom Chrome Executable Path (Opsional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: C:\Program Files\Google\Chrome\Application\chrome.exe"
-                        value={config.customChromePath || ''}
-                        onChange={(e) => setConfig({ ...config, customChromePath: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400">
-                    Bot dijalankan menggunakan Chromium bawaan Puppeteer.
-                  </p>
                 )}
               </div>
 
               {/* Integrasi Google Gemini AI */}
-              <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-200">
+                    <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
                       Google Gemini AI
                     </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Menjawab pertanyaan kuesioner lowongan yang belum ada di database.
                     </p>
                   </div>
@@ -1140,7 +1063,7 @@ export default function Home() {
                     href="https://aistudio.google.com/app/apikey"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-blue-400 hover:text-blue-300 font-medium underline flex items-center gap-1 self-start sm:self-auto"
+                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium underline flex items-center gap-1 self-start sm:self-auto"
                   >
                     <span>Dapatkan API Key</span>
                     <span>↗</span>
@@ -1149,8 +1072,8 @@ export default function Home() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Gemini API Key <span className="text-slate-500 font-normal lowercase">(opsional)</span>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      Gemini API Key <span className="text-slate-400 font-normal lowercase">(opsional)</span>
                     </label>
                   </div>
                   <div className="relative">
@@ -1159,143 +1082,88 @@ export default function Home() {
                       placeholder="AIzaSy... (kosongkan jika tidak menggunakan AI)"
                       value={config.geminiApiKey || ''}
                       onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 pr-28 text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500 tracking-wider"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 pr-28 text-slate-900 font-mono text-xs focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 tracking-wider transition-colors"
                     />
                     <button
                       type="button"
                       onClick={() => setShowGeminiKey(!showGeminiKey)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-medium"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition font-medium cursor-pointer"
                     >
                       {showGeminiKey ? 'Sembunyikan' : 'Tampilkan'}
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">
-                    Opsional. Jika kosong, bot akan menggunakan database pertanyaan dan pilihan opsi default.
+                    Opsional. Jika kosong, bot akan menggunakan database pertanyaan dan opsi default.
                   </p>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2 pt-4 flex-wrap gap-2">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-200">
-                    Google Sheets API
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Penyimpanan log riwayat lamaran dan database pertanyaan.
-                  </p>
+              <div className="flex justify-between items-start border-b border-slate-200 pb-3 pt-2 flex-wrap gap-3">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Penyimpanan Data Lokal
+                </h2>
+                <div className="flex flex-col sm:items-end gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleExportAppliedJobsCsv}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition shadow-xs cursor-pointer"
+                    >
+                      Export CSV
+                    </button>
+                    <label className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition shadow-xs">
+                      Import CSV
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleImportAppliedJobsCsv}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleClearAppliedHistory}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
+                    >
+                      Kosongkan Riwayat
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-mono font-medium">
+                      {appliedJobs.length} Lamaran
+                    </span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-mono font-medium">
+                      {questions.length} Pertanyaan
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleExportConfig}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
-                    title="Unduh backup konfigurasi & profil ke file JSON"
-                  >
-                    Export JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setIsImportModalOpen(true); setImportError(null); }}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm"
-                    title="Impor konfigurasi dari teks atau file JSON"
-                  >
-                    Import JSON
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-lg flex items-center justify-between text-xs text-blue-300 flex-wrap gap-2">
-                <span>Belum memiliki Google Service Account JSON atau Spreadsheet?</span>
-                <button
-                  type="button"
-                  onClick={() => { setIsSheetsTutorialOpen(true); setActiveTutorialStep(1); }}
-                  className="font-semibold text-blue-400 hover:text-blue-200 underline"
-                >
-                  Buka Panduan Setup →
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Google Spreadsheet ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Masukkan ID Spreadsheet Anda"
-                    value={config.spreadsheetId}
-                    onChange={(e) => setConfig({ ...config, spreadsheetId: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Tab Log Lamaran
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Sheet1"
-                    value={config.sheetName}
-                    onChange={(e) => setConfig({ ...config, sheetName: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Tab Database Pertanyaan
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Sheet2"
-                    value={config.questionsSheetName || 'Sheet2'}
-                    onChange={(e) => setConfig({ ...config, questionsSheetName: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Google Credentials JSON
-                </label>
-                <textarea
-                  rows={6}
-                  required
-                  placeholder="Paste isi file credentials.json di sini..."
-                  value={config.googleCredentialsJson}
-                  onChange={(e) => setConfig({ ...config, googleCredentialsJson: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 font-mono text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-                />
               </div>
 
               {saveStatus && (
                 <div
-                  className={`p-3 rounded text-sm ${
+                  className={`p-3 rounded-lg text-xs ${
                     saveStatus.type === 'success'
-                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950 border border-rose-800 text-rose-300'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border border-rose-200 text-rose-800'
                   }`}
                 >
                   {saveStatus.message}
                 </div>
               )}
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap pt-2">
                 <button
                   type="submit"
                   disabled={isSavingConfig}
-                  className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                  className={`font-semibold px-5 py-2 rounded-lg text-xs transition flex items-center gap-2 cursor-pointer shadow-xs ${
                     isSavingConfig
-                      ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                      ? 'bg-indigo-400 text-white cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
                 >
                   {isSavingConfig ? (
                     <>
-                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                       </svg>
@@ -1308,30 +1176,49 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleResetConfig}
-                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition"
-                  title="Kosongkan semua form dan kembalikan ke kondisi onboarding baru"
+                  className="font-medium px-4 py-2 rounded-lg text-xs bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 hover:border-rose-300 transition cursor-pointer"
+                  title="Kosongkan semua form dan kembalikan ke kondisi baru"
                 >
                   Reset Pengaturan
                 </button>
               </div>
             </form>
           )}
-
           {/* TAB 2: CANDIDATE PROFILE */}
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveConfig} className="space-y-6">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-800 pb-2">
-                  Profil Pelamar
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Data referensi untuk menjawab kuesioner dan kualifikasi lowongan kerja secara otomatis.
-                </p>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Profil Pelamar
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Data referensi untuk menjawab kuesioner dan kualifikasi lowongan kerja secara otomatis.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleExportConfig}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Unduh backup konfigurasi & profil ke file JSON"
+                  >
+                    Backup Config
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsImportModalOpen(true); setImportError(null); }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Impor konfigurasi dari teks atau file JSON"
+                  >
+                    Restore Config
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nama Lengkap
                   </label>
                   <input
@@ -1339,12 +1226,12 @@ export default function Home() {
                     placeholder="Contoh: Yoga Adi Saputra"
                     value={config.fullName || ''}
                     onChange={(e) => setConfig({ ...config, fullName: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Gaji Bulanan yang Diharapkan (IDR)
                   </label>
                   <input
@@ -1352,12 +1239,12 @@ export default function Home() {
                     placeholder="Contoh: 8000000"
                     value={config.expectedSalary || ''}
                     onChange={(e) => setConfig({ ...config, expectedSalary: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nilai IPK / GPA
                   </label>
                   <input
@@ -1365,18 +1252,18 @@ export default function Home() {
                     placeholder="Contoh: 3.75"
                     value={config.gpa || ''}
                     onChange={(e) => setConfig({ ...config, gpa: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Jenjang Pendidikan Terakhir
                   </label>
                   <select
                     value={config.educationLevel || 'Sarjana (S1)'}
                     onChange={(e) => setConfig({ ...config, educationLevel: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   >
                     <option value="Sarjana (S1)">Sarjana (S1) / Bachelor Degree</option>
                     <option value="Diploma (D3)">Diploma (D3)</option>
@@ -1386,7 +1273,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Total Pengalaman Kerja (Tahun)
                   </label>
                   <input
@@ -1394,18 +1281,18 @@ export default function Home() {
                     placeholder="Contoh: 3"
                     value={config.yearsOfExperience || 3}
                     onChange={(e) => setConfig({ ...config, yearsOfExperience: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Waktu Mulai Bekerja (Notice Period)
                   </label>
                   <select
                     value={config.noticePeriod || 'Immediately'}
                     onChange={(e) => setConfig({ ...config, noticePeriod: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   >
                     <option value="Immediately">Immediately / Secepatnya / ASAP (Default)</option>
                     <option value="2 weeks">2 Minggu (2 weeks)</option>
@@ -1415,7 +1302,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nomor Telepon / WhatsApp
                   </label>
                   <input
@@ -1423,12 +1310,12 @@ export default function Home() {
                     placeholder="Contoh: 081234567890"
                     value={config.phoneNumber || ''}
                     onChange={(e) => setConfig({ ...config, phoneNumber: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Link Portofolio / Website
                   </label>
                   <input
@@ -1436,12 +1323,12 @@ export default function Home() {
                     placeholder="Contoh: https://github.com/yogaadi"
                     value={config.portfolioUrl || ''}
                     onChange={(e) => setConfig({ ...config, portfolioUrl: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Link GitHub
                   </label>
                   <input
@@ -1449,12 +1336,12 @@ export default function Home() {
                     placeholder="Contoh: https://github.com/yogaadi"
                     value={config.githubUrl || ''}
                     onChange={(e) => setConfig({ ...config, githubUrl: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Link LinkedIn
                   </label>
                   <input
@@ -1462,12 +1349,12 @@ export default function Home() {
                     placeholder="Contoh: https://www.linkedin.com/in/yoga-adi"
                     value={config.linkedinUrl || ''}
                     onChange={(e) => setConfig({ ...config, linkedinUrl: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Domisili / Lokasi Tempat Tinggal
                   </label>
                   <input
@@ -1475,7 +1362,7 @@ export default function Home() {
                     placeholder="Contoh: Jakarta Selatan, DKI Jakarta"
                     value={config.domicile || ''}
                     onChange={(e) => setConfig({ ...config, domicile: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors duration-150"
                   />
                 </div>
               </div>
@@ -1483,25 +1370,25 @@ export default function Home() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
                       Daftar Keahlian / Skills &amp; Tools (Pisahkan dengan koma)
                     </label>
                     <div className="group relative cursor-pointer">
-                      <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-blue-900/60 text-blue-400 border border-blue-700/50">
+                      <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-slate-100 text-slate-500 border border-slate-300">
                         ?
                       </span>
-                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 shadow-xl z-50 pointer-events-none">
-                        <p className="font-semibold text-blue-400 mb-1">Checklist Keahlian:</p>
-                        <p className="leading-relaxed">Daftar keahlian dan tools yang Anda kuasai untuk pengisian kuesioner lowongan.</p>
-                        <p className="mt-1.5 text-slate-400">• <strong className="text-purple-400">Jobstreet</strong>: Mencentang opsi kualifikasi yang cocok.</p>
-                        <p className="text-slate-400">• <strong className="text-emerald-400">Glints</strong>: Memilih tingkat keahlian.</p>
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 shadow-xl z-50 pointer-events-none">
+                        <p className="font-semibold text-indigo-600 mb-1">Checklist Keahlian:</p>
+                        <p className="leading-relaxed text-slate-600">Daftar keahlian dan tools yang Anda kuasai untuk pengisian kuesioner lowongan.</p>
+                        <p className="mt-1.5 text-slate-600">• <strong className="text-purple-600">Jobstreet</strong>: Mencentang opsi kualifikasi yang cocok.</p>
+                        <p className="text-slate-600">• <strong className="text-emerald-600">Glints</strong>: Memilih tingkat keahlian.</p>
                       </div>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsTemplateModalOpen(true)}
-                    className="px-3 py-1.5 rounded text-xs font-semibold bg-blue-950/80 hover:bg-blue-900/80 text-blue-300 border border-blue-800/80 transition flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     Pilih Template Profesi
                   </button>
@@ -1511,35 +1398,35 @@ export default function Home() {
                   placeholder="Contoh: JavaScript, TypeScript, React, Next.js, Node.js, Express, Go, PostgreSQL, MySQL, RESTful API, Docker, Git"
                   value={config.skills || ''}
                   onChange={(e) => setConfig({ ...config, skills: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 leading-relaxed font-mono"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 leading-relaxed font-mono transition-colors duration-150"
                 />
               </div>
 
               {saveStatus && (
                 <div
-                  className={`p-3 rounded text-sm ${
+                  className={`p-3 rounded-lg text-xs ${
                     saveStatus.type === 'success'
-                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950 border border-rose-800 text-rose-300'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border border-rose-200 text-rose-800'
                   }`}
                 >
                   {saveStatus.message}
                 </div>
               )}
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap pt-2">
                 <button
                   type="submit"
                   disabled={isSavingConfig}
-                  className={`font-semibold px-6 py-2.5 rounded transition flex items-center gap-2 ${
+                  className={`font-semibold px-5 py-2 rounded-lg text-xs transition flex items-center gap-2 cursor-pointer shadow-xs ${
                     isSavingConfig
-                      ? 'bg-blue-800 text-slate-300 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-blue-500/20'
+                      ? 'bg-indigo-400 text-white cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
                 >
                   {isSavingConfig ? (
                     <>
-                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                       </svg>
@@ -1552,7 +1439,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleResetConfig}
-                  className="font-medium px-4 py-2.5 rounded text-xs bg-slate-800 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 border border-slate-700 transition"
+                  className="font-medium px-4 py-2 rounded-lg text-xs bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 hover:border-rose-300 transition cursor-pointer"
                   title="Kembalikan form ke awal"
                 >
                   Reset Form
@@ -1561,44 +1448,35 @@ export default function Home() {
             </form>
           )}
 
-          {/* TAB 3: QUESTIONS GOOGLE SHEETS & CSV DATABASE */}
+          {/* TAB 3: QUESTIONS DATABASE */}
           {activeTab === 'questions' && (
             <div className="space-y-6">
               {/* Header & Controls */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-3">
                 <div>
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <h2 className="text-lg font-semibold text-slate-200">
-                      Database Pertanyaan ({questions.length})
-                    </h2>
-                    {questionsSource === 'google_sheets' ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Google Sheets ({config.questionsSheetName || 'Sheet2'})
-                      </span>
-                    ) : (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Google Sheets Belum Terhubung
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Daftar pertanyaan dan jawaban kuesioner lowongan kerja.
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Database Pertanyaan
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                    {questions.length} pertanyaan tersimpan
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2.5 flex-wrap">
                   {/* Add New Question Button */}
                   <button
+                    type="button"
                     onClick={() => setIsNewQuestionModalOpen(true)}
-                    className="px-3.5 py-1.5 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     Tambah Pertanyaan
                   </button>
 
                   {/* Clean Duplicate Questions Button */}
                   <button
+                    type="button"
                     onClick={handleCleanCsv}
-                    className="px-3.5 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     Bersihkan Duplikat
                   </button>
@@ -1608,10 +1486,10 @@ export default function Home() {
               {/* Status Alert Banner */}
               {csvSaveStatus && (
                 <div
-                  className={`p-3 rounded text-sm ${
+                  className={`p-3 rounded-lg text-xs ${
                     csvSaveStatus.type === 'success'
-                      ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950 border border-rose-800 text-rose-300'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border border-rose-200 text-rose-800'
                   }`}
                 >
                   {csvSaveStatus.message}
@@ -1620,148 +1498,152 @@ export default function Home() {
 
               {/* VISUAL TABLE */}
               <div className="space-y-4">
-                  {/* Search bar */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Cari pertanyaan, tipe, atau jawaban..."
-                      value={questionSearch}
-                      onChange={(e) => setQuestionSearch(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
-                    />
-                    {questionSearch && (
-                      <button
-                        onClick={() => setQuestionSearch('')}
-                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded transition"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Questions Table */}
-                  <div className="overflow-x-auto rounded border border-slate-800">
-                    <table className="w-full text-left text-sm text-slate-300">
-                      <thead className="bg-slate-900/80 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                        <tr>
-                          <th className="p-3 w-12 text-center">No</th>
-                          <th className="p-3">Pertanyaan</th>
-                          <th className="p-3 w-28">Tipe</th>
-                          <th className="p-3">Pilihan Opsi</th>
-                          <th className="p-3">Jawaban Bot</th>
-                          <th className="p-3 w-28 text-center">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-normal">
-                        {(() => {
-                          const filtered = questions.filter((q) => {
-                            if (!questionSearch.trim()) return true;
-                            const term = questionSearch.toLowerCase();
-                            return (
-                              q.question.toLowerCase().includes(term) ||
-                              q.answer.toLowerCase().includes(term) ||
-                              q.type.toLowerCase().includes(term) ||
-                              q.options.toLowerCase().includes(term)
-                            );
-                          });
-
-                          if (filtered.length === 0) {
-                            return (
-                              <tr>
-                                <td colSpan={6} className="p-8 text-center text-slate-500 italic">
-                                  {questionSearch
-                                    ? `Tidak ditemukan pertanyaan yang cocok dengan "${questionSearch}".`
-                                    : 'Belum ada pertanyaan di database.'}
-                                </td>
-                              </tr>
-                            );
-                          }
-
-                          return filtered.map((item, idx) => {
-                            let typeBadge = 'bg-slate-800 text-slate-300 border-slate-700';
-                            if (item.type === 'radiobutton') typeBadge = 'bg-blue-950 text-blue-300 border-blue-800';
-                            if (item.type === 'checklist') typeBadge = 'bg-purple-950 text-purple-300 border-purple-800';
-                            if (item.type === 'text') typeBadge = 'bg-emerald-950 text-emerald-300 border-emerald-800';
-                            if (item.type === 'dropdown') typeBadge = 'bg-amber-950 text-amber-300 border-amber-800';
-
-                            return (
-                              <tr key={item.id} className="hover:bg-slate-900/40 transition">
-                                <td className="p-3 text-center text-slate-500 text-xs font-mono">{idx + 1}</td>
-                                <td className="p-3 font-medium text-slate-200">{item.question}</td>
-                                <td className="p-3">
-                                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${typeBadge}`}>
-                                    {item.type || 'radiobutton'}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-xs text-slate-400 max-w-xs truncate" title={item.options}>
-                                  {item.options || <span className="text-slate-600 italic">-</span>}
-                                </td>
-                                <td className="p-3">
-                                  <span className="font-semibold text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 text-xs">
-                                    {item.answer}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-center">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      onClick={() => setEditingQuestion(item)}
-                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded transition"
-                                      title="Edit Pertanyaan"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteQuestion(item.id)}
-                                      className="text-xs bg-slate-800 hover:bg-slate-700 text-rose-400 px-2 py-1 rounded transition"
-                                      title="Hapus Pertanyaan"
-                                    >
-                                      Hapus
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
+                {/* Search bar */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Cari pertanyaan, tipe, atau jawaban..."
+                    value={questionSearch}
+                    onChange={(e) => setQuestionSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-colors"
+                  />
+                  {questionSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setQuestionSearch('')}
+                      className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg border border-slate-200 transition cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
                 </div>
+
+                {/* Questions Table */}
+                <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-2xs">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-slate-50 text-xs font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 w-12 text-center">No</th>
+                        <th className="p-3">Pertanyaan</th>
+                        <th className="p-3 w-28">Tipe</th>
+                        <th className="p-3">Pilihan Opsi</th>
+                        <th className="p-3">Jawaban Bot</th>
+                        <th className="p-3 w-28 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-normal">
+                      {(() => {
+                        const filtered = questions.filter((q) => {
+                          if (!questionSearch.trim()) return true;
+                          const term = questionSearch.toLowerCase();
+                          return (
+                            q.question.toLowerCase().includes(term) ||
+                            q.answer.toLowerCase().includes(term) ||
+                            q.type.toLowerCase().includes(term) ||
+                            q.options.toLowerCase().includes(term)
+                          );
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-400 italic">
+                                {questionSearch
+                                  ? `Tidak ditemukan pertanyaan yang cocok dengan "${questionSearch}".`
+                                  : 'Belum ada pertanyaan di database.'}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((item, idx) => {
+                          let typeBadge = 'bg-slate-100 text-slate-700 border-slate-200';
+                          if (item.type === 'radiobutton') typeBadge = 'bg-blue-50 text-blue-700 border-blue-200';
+                          if (item.type === 'checklist') typeBadge = 'bg-purple-50 text-purple-700 border-purple-200';
+                          if (item.type === 'text') typeBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          if (item.type === 'dropdown') typeBadge = 'bg-amber-50 text-amber-700 border-amber-200';
+
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="p-3 text-center text-slate-400 text-xs font-mono">{idx + 1}</td>
+                              <td className="p-3 font-medium text-slate-900">{item.question}</td>
+                              <td className="p-3">
+                                <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${typeBadge}`}>
+                                  {item.type || 'radiobutton'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-xs text-slate-500 max-w-xs truncate" title={item.options}>
+                                {item.options || <span className="text-slate-400 italic">-</span>}
+                              </td>
+                              <td className="p-3">
+                                <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">
+                                  {item.answer}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingQuestion(item)}
+                                    className="text-xs bg-white hover:bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded border border-slate-200 hover:border-indigo-200 transition shadow-2xs cursor-pointer"
+                                    title="Edit Pertanyaan"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteQuestion(item.id)}
+                                    className="text-xs bg-white hover:bg-rose-50 text-rose-700 px-2.5 py-1 rounded border border-slate-200 hover:border-rose-200 transition shadow-2xs cursor-pointer"
+                                    title="Hapus Pertanyaan"
+                                  >
+                                    Hapus
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
               {/* MODAL: TAMBAH PERTANYAAN BARU */}
               {isNewQuestionModalOpen && (
-                <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
-                  <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h3 className="text-base font-semibold text-slate-100">Tambah Pertanyaan Baru</h3>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-white border border-slate-200 rounded-xl max-w-lg w-full p-6 space-y-4 shadow-xl text-slate-800">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                      <h3 className="text-sm font-semibold text-slate-900">Tambah Pertanyaan Baru</h3>
                       <button
+                        type="button"
                         onClick={() => setIsNewQuestionModalOpen(false)}
-                        className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                        className="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer"
                       >
                         ✕
                       </button>
                     </div>
 
-                    <form onSubmit={handleAddNewQuestion} className="space-y-4 text-sm">
+                    <form onSubmit={handleAddNewQuestion} className="space-y-4 text-xs">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Pertanyaan</label>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Pertanyaan</label>
                         <input
                           type="text"
                           required
                           placeholder="Contoh: What is your latest GPA?"
                           value={newQuestionData.question}
                           onChange={(e) => setNewQuestionData({ ...newQuestionData, question: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-400 mb-1">Tipe Input</label>
+                          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Tipe Input</label>
                           <select
                             value={newQuestionData.type}
                             onChange={(e) => setNewQuestionData({ ...newQuestionData, type: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                           >
                             <option value="radiobutton">Radiobutton (Pilihan Tunggal)</option>
                             <option value="text">Text / TextArea (Isian Bebas)</option>
@@ -1771,20 +1653,20 @@ export default function Home() {
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-400 mb-1">Jawaban Bot</label>
+                          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Jawaban Bot</label>
                           <input
                             type="text"
                             required
                             placeholder="Contoh: 3.75 atau Ahli"
                             value={newQuestionData.answer}
                             onChange={(e) => setNewQuestionData({ ...newQuestionData, answer: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-semibold text-emerald-400"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-semibold text-emerald-700"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
                           Pilihan Opsi (Pisahkan dengan tanda | )
                         </label>
                         <input
@@ -1792,22 +1674,22 @@ export default function Home() {
                           placeholder="Contoh: Tidak Berpengalaman | Dasar | Menengah | Ahli"
                           value={newQuestionData.options}
                           onChange={(e) => setNewQuestionData({ ...newQuestionData, options: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                         />
-                        <p className="text-[11px] text-slate-500 mt-1">Kosongkan jika tipe input adalah Text / TextArea.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Kosongkan jika tipe input adalah Text / TextArea.</p>
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                         <button
                           type="button"
                           onClick={() => setIsNewQuestionModalOpen(false)}
-                          className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+                          className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium cursor-pointer"
                         >
                           Batal
                         </button>
                         <button
                           type="submit"
-                          className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
                         >
                           Simpan Pertanyaan
                         </button>
@@ -1819,37 +1701,38 @@ export default function Home() {
 
               {/* MODAL: EDIT PERTANYAAN */}
               {editingQuestion && (
-                <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50 animate-fade-in">
-                  <div className="bg-slate-950 border border-slate-800 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                      <h3 className="text-base font-semibold text-slate-100">Edit Pertanyaan</h3>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-white border border-slate-200 rounded-xl max-w-lg w-full p-6 space-y-4 shadow-xl text-slate-800">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                      <h3 className="text-sm font-semibold text-slate-900">Edit Pertanyaan</h3>
                       <button
+                        type="button"
                         onClick={() => setEditingQuestion(null)}
-                        className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                        className="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer"
                       >
                         ✕
                       </button>
                     </div>
 
-                    <form onSubmit={handleUpdateQuestion} className="space-y-4 text-sm">
+                    <form onSubmit={handleUpdateQuestion} className="space-y-4 text-xs">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Pertanyaan</label>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Pertanyaan</label>
                         <input
                           type="text"
                           required
                           value={editingQuestion.question}
                           onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-400 mb-1">Tipe Input</label>
+                          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Tipe Input</label>
                           <select
                             value={editingQuestion.type}
                             onChange={(e) => setEditingQuestion({ ...editingQuestion, type: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                           >
                             <option value="radiobutton">Radiobutton (Pilihan Tunggal)</option>
                             <option value="text">Text / TextArea (Isian Bebas)</option>
@@ -1859,40 +1742,40 @@ export default function Home() {
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-400 mb-1">Jawaban Bot</label>
+                          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Jawaban Bot</label>
                           <input
                             type="text"
                             required
                             value={editingQuestion.answer}
                             onChange={(e) => setEditingQuestion({ ...editingQuestion, answer: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-semibold text-emerald-400"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-semibold text-emerald-700"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
                           Pilihan Opsi (Pisahkan dengan tanda | )
                         </label>
                         <input
                           type="text"
                           value={editingQuestion.options}
                           onChange={(e) => setEditingQuestion({ ...editingQuestion, options: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                         />
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                         <button
                           type="button"
                           onClick={() => setEditingQuestion(null)}
-                          className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+                          className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium cursor-pointer"
                         >
                           Batal
                         </button>
                         <button
                           type="submit"
-                          className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                          className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
                         >
                           Simpan Perubahan
                         </button>
@@ -1906,37 +1789,58 @@ export default function Home() {
 
           {/* TAB 4: LIVE LOGS */}
           {activeTab === 'logs' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm font-medium">Log Aktivitas:</span>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className={`h-2.5 w-2.5 rounded-full ${isBotRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                  <span className="text-sm font-semibold text-slate-900">Konsol Log Realtime</span>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono">
+                    {logs.length} baris
+                  </span>
+                </div>
                 <button
+                  type="button"
                   onClick={() => setLogs([])}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition"
+                  className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition cursor-pointer"
                 >
-                  Clear logs
+                  Bersihkan Log
                 </button>
               </div>
-              <div
-                ref={logTerminalRef}
-                className="h-96 bg-slate-900 rounded border border-slate-800 p-4 font-mono text-sm overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800"
-              >
-                {logs.length === 0 ? (
-                  <span className="text-slate-600 italic">Belum ada aktivitas. Silakan jalankan bot.</span>
-                ) : (
-                  logs.map((log, index) => {
-                    let color = 'text-slate-300';
-                    if (log.includes('✅')) color = 'text-emerald-400';
-                    if (log.includes('❌') || log.includes('🚨')) color = 'text-rose-400';
-                    if (log.includes('⚠️')) color = 'text-amber-400';
-                    if (log.includes('🚀') || log.includes('🏁')) color = 'text-blue-400 font-bold';
 
-                    return (
-                      <div key={index} className={color}>
-                        {log}
-                      </div>
-                    );
-                  })
-                )}
+              <div className="bg-slate-950 rounded-xl border border-slate-800 shadow-sm overflow-hidden">
+                <div className="px-4 py-2 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-700 inline-block" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-700 inline-block" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-700 inline-block" />
+                    <span className="text-xs font-mono text-slate-400 ml-2">bot-runner stdout</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">UTF-8</span>
+                </div>
+                <div
+                  ref={logTerminalRef}
+                  className="h-96 p-4 font-mono text-xs overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 text-slate-300 leading-relaxed"
+                >
+                  {logs.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-slate-500 text-xs italic">
+                      Belum ada aktivitas. Silakan jalankan bot untuk memantau proses secara langsung.
+                    </div>
+                  ) : (
+                    logs.map((log, index) => {
+                      let color = 'text-slate-300';
+                      if (log.includes('✅') || log.includes('[SUCCESS]')) color = 'text-emerald-400';
+                      if (log.includes('❌') || log.includes('🚨') || log.includes('[ERROR]') || log.includes('[FAILED]')) color = 'text-rose-400';
+                      if (log.includes('⚠️') || log.includes('[WARN]')) color = 'text-amber-400';
+                      if (log.includes('🚀') || log.includes('🏁') || log.includes('[START]') || log.includes('[DONE]')) color = 'text-sky-400 font-semibold';
+
+                      return (
+                        <div key={index} className={color}>
+                          {log}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1944,91 +1848,135 @@ export default function Home() {
           {/* TAB 5: HISTORY */}
           {activeTab === 'history' && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm font-medium">Riwayat Lamaran:</span>
-                <button
-                  onClick={() => fetchAppliedHistory()}
-                  className="text-xs text-blue-400 hover:underline px-2 py-1"
-                >
-                  Refresh Data
-                </button>
+              <div className="flex justify-between items-center flex-wrap gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-sm font-semibold text-slate-900">Riwayat Lamaran</h3>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200">
+                    Total: {appliedJobs.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleExportAppliedJobsCsv}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+                    title="Unduh seluruh data lamaran ke format CSV"
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Export CSV
+                  </button>
+                  <label className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Import CSV
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleImportAppliedJobsCsv}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => fetchAppliedHistory()}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50/50 transition cursor-pointer"
+                  >
+                    Muat Ulang
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearAppliedHistory}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 transition cursor-pointer"
+                  >
+                    Kosongkan
+                  </button>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Perusahaan</th>
-                      <th className="py-3 px-4">Posisi</th>
-                      <th className="py-3 px-4">Platform</th>
-                      <th className="py-3 px-4">Tanggal</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Tautan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-sm">
-                    {appliedJobs.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-600 italic">
-                          Belum ada riwayat lamaran yang tercatat di Google Sheet.
-                        </td>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
+                        <th className="py-3 px-4">Perusahaan</th>
+                        <th className="py-3 px-4">Posisi</th>
+                        <th className="py-3 px-4">Platform</th>
+                        <th className="py-3 px-4">Tanggal</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Tautan</th>
                       </tr>
-                    ) : (
-                      appliedJobs.map((job, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/50">
-                          <td className="py-3 px-4 font-semibold text-slate-200">{job.company}</td>
-                          <td className="py-3 px-4 text-slate-300">{job.title}</td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                job.platform === 'Glints'
-                                  ? 'bg-blue-950 text-blue-400 border border-blue-900'
-                                  : job.platform === 'Jobstreet'
-                                  ? 'bg-purple-950 text-purple-400 border border-purple-900'
-                                  : job.platform === 'LinkedIn'
-                                  ? 'bg-sky-950 text-sky-400 border border-sky-900'
-                                  : 'bg-emerald-950 text-emerald-400 border border-emerald-900'
-                              }`}
-                            >
-                              {job.platform}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-slate-400">{job.date}</td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                job.status === 'Tidak Sesuai' || job.status?.toLowerCase().includes('tidak sesuai')
-                                  ? 'bg-rose-950 text-rose-400 border border-rose-900'
-                                  : job.status === 'Dalam Review' || job.status?.toLowerCase().includes('review') || job.status?.toLowerCase().includes('ditinjau')
-                                  ? 'bg-sky-950 text-sky-400 border border-sky-900'
-                                  : job.status === 'Wawancara' || job.status?.toLowerCase().includes('wawancara') || job.status?.toLowerCase().includes('interview')
-                                  ? 'bg-purple-950 text-purple-400 border border-purple-900'
-                                  : job.status === 'Diterima' || job.status?.toLowerCase().includes('diterima') || job.status?.toLowerCase().includes('offered')
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold'
-                                  : job.status === 'Success' || job.status === 'Applied' || job.status === 'Dilamar'
-                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-900'
-                                  : job.status === 'Already Applied'
-                                  ? 'bg-amber-950 text-amber-400 border border-amber-900'
-                                  : 'bg-slate-800 text-slate-300 border border-slate-700'
-                              }`}
-                            >
-                              {job.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <a
-                              href={job.jobUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-400 hover:underline text-xs"
-                            >
-                              Buka Detail ↗
-                            </a>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {appliedJobs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-slate-500 italic">
+                            Belum ada riwayat lamaran yang tersimpan di penyimpanan lokal.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        appliedJobs.map((job, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-3 px-4 font-semibold text-slate-900">{job.company}</td>
+                            <td className="py-3 px-4 text-slate-700">{job.title}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                  job.platform === 'Glints'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : job.platform === 'Jobstreet'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : job.platform === 'LinkedIn'
+                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}
+                              >
+                                {job.platform}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-500">{job.date}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                  job.status === 'Tidak Sesuai' || job.status?.toLowerCase().includes('tidak sesuai')
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : job.status === 'Dalam Review' || job.status?.toLowerCase().includes('review') || job.status?.toLowerCase().includes('ditinjau')
+                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                    : job.status === 'Wawancara' || job.status?.toLowerCase().includes('wawancara') || job.status?.toLowerCase().includes('interview')
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : job.status === 'Diterima' || job.status?.toLowerCase().includes('diterima') || job.status?.toLowerCase().includes('offered')
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold'
+                                    : job.status === 'Success' || job.status === 'Applied' || job.status === 'Dilamar'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : job.status === 'Already Applied'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {job.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <a
+                                href={job.jobUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-indigo-600 hover:text-indigo-800 hover:underline font-medium text-xs inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Buka</span>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2036,71 +1984,74 @@ export default function Home() {
 
         {/* MODAL: IMPORT CONFIG (FILE OR TEXT) */}
         {isImportModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-            <div className="bg-slate-950 border border-slate-800 rounded-xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-xl">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-slate-900">
                     Impor Konfigurasi (JSON)
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Impor konfigurasi dari teks JSON atau upload file.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Impor konfigurasi dari teks JSON atau upload file backup.
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => { setIsImportModalOpen(false); setImportError(null); }}
-                  className="text-slate-400 hover:text-slate-200 text-lg leading-none"
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
                 >
-                  ✕
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
 
-              <div className="flex rounded-lg bg-slate-900 p-1 border border-slate-800 text-xs font-semibold">
+              <div className="flex rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs font-semibold">
                 <button
                   type="button"
                   onClick={() => { setImportMode('text'); setImportError(null); }}
-                  className={`flex-1 py-1.5 rounded-md transition ${importMode === 'text' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  className={`flex-1 py-1.5 rounded-md transition cursor-pointer ${importMode === 'text' ? 'bg-white text-indigo-700 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Teks JSON
                 </button>
                 <button
                   type="button"
                   onClick={() => { setImportMode('file'); setImportError(null); }}
-                  className={`flex-1 py-1.5 rounded-md transition ${importMode === 'file' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  className={`flex-1 py-1.5 rounded-md transition cursor-pointer ${importMode === 'file' ? 'bg-white text-indigo-700 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Upload File .JSON
                 </button>
               </div>
 
               {importError && (
-                <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-lg text-rose-300 text-xs">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
                   {importError}
                 </div>
               )}
 
               {importMode === 'text' ? (
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
                     Paste teks JSON konfigurasi Anda di sini:
                   </label>
                   <textarea
                     rows={8}
                     value={importJsonText}
                     onChange={(e) => setImportJsonText(e.target.value)}
-                    placeholder={'{\n  "spreadsheetId": "196J8Q5Vqey-NDXFF...",\n  "fullName": "Yoga Adi",\n  "expectedSalary": 8000000\n}'}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+                    placeholder={'{\n  "fullName": "Yoga Adi",\n  "expectedSalary": 8000000\n}'}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-3 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 placeholder:text-slate-400"
                   />
                 </div>
               ) : (
                 <div
-                  className="py-8 border-2 border-dashed border-slate-800 hover:border-blue-500/60 rounded-xl text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/70"
+                  className="py-8 border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-xl text-center cursor-pointer transition bg-slate-50/50 hover:bg-indigo-50/20 group"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <svg className="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-8 h-8 mx-auto mb-2 text-slate-400 group-hover:text-indigo-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  <p className="text-sm font-semibold text-slate-200">Klik untuk memilih file konfigurasi .json</p>
-                  <p className="text-xs text-slate-400 mt-1">Pilih file JSON hasil export sebelumnya</p>
+                  <p className="text-sm font-semibold text-slate-800">Klik untuk memilih file konfigurasi .json</p>
+                  <p className="text-xs text-slate-500 mt-1">Pilih file JSON hasil export sebelumnya</p>
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -2111,11 +2062,11 @@ export default function Home() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => { setIsImportModalOpen(false); setImportError(null); }}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium cursor-pointer"
                 >
                   Batal
                 </button>
@@ -2124,7 +2075,7 @@ export default function Home() {
                     type="button"
                     onClick={() => applyConfigJson(importJsonText)}
                     disabled={!importJsonText.trim()}
-                    className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold shadow-md transition"
+                    className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 text-white text-xs font-semibold shadow-xs cursor-pointer"
                   >
                     Terapkan Konfigurasi
                   </button>
@@ -2136,55 +2087,57 @@ export default function Home() {
 
         {/* MODAL: PILIH TEMPLATE PROFESI */}
         {isTemplateModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
               {/* Header */}
-              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50/80">
                 <div>
-                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
                     Pilih Template Profesi
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Pilih bidang pekerjaan untuk mengisi keahlian dan kata kunci pencarian otomatis.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsTemplateModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1.5 rounded-md hover:bg-slate-800 transition"
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
                 >
-                  ✕
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
 
               {/* Options Bar */}
-              <div className="px-6 py-3 bg-slate-900/80 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <span className="text-slate-300 font-semibold">Opsi Penerapan Template:</span>
+              <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <span className="text-slate-700 font-semibold">Opsi Penerapan Template:</span>
                 <div className="flex items-center gap-4 flex-wrap">
-                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-slate-900">
                     <input
                       type="checkbox"
                       checked={templateApplyOptions.skills}
                       onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, skills: e.target.checked })}
-                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                     <span>Daftar Skill Checklist</span>
                   </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-slate-900">
                     <input
                       type="checkbox"
                       checked={templateApplyOptions.keywords}
                       onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, keywords: e.target.checked })}
-                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                     <span>Kata Kunci Pencarian (Keywords)</span>
                   </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-slate-900">
                     <input
                       type="checkbox"
                       checked={templateApplyOptions.profile}
                       onChange={(e) => setTemplateApplyOptions({ ...templateApplyOptions, profile: e.target.checked })}
-                      className="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-950"
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                     <span>Contoh Ekspektasi Gaji &amp; Pengalaman</span>
                   </label>
@@ -2192,50 +2145,47 @@ export default function Home() {
               </div>
 
               {/* Grid of 8 Role Cards */}
-              <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/30">
                 {ROLE_TEMPLATES.map((role) => (
                   <div
                     key={role.id}
-                    className="p-4 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-blue-500/50 rounded-xl transition flex flex-col justify-between group shadow-sm"
+                    className="p-4 bg-white hover:bg-slate-50/60 border border-slate-200 hover:border-indigo-300 rounded-xl transition flex flex-col justify-between group shadow-2xs hover:shadow-xs"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-2xl">{role.icon}</span>
-                          <div>
-                            <h4 className="text-sm font-bold text-slate-100 group-hover:text-blue-400 transition">
-                              {role.name}
-                            </h4>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium inline-block mt-0.5 ${role.badgeColor}`}>
-                              {role.category}
-                            </span>
-                          </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                            {role.name}
+                          </h4>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium inline-block mt-0.5 ${role.badgeColor}`}>
+                            {role.category}
+                          </span>
                         </div>
                       </div>
 
                       {/* Highlight Skills Badges */}
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {role.highlightSkills.map((badge, idx) => (
-                          <span key={idx} className="text-[11px] bg-slate-950 text-slate-300 border border-slate-800 px-2 py-0.5 rounded-md">
+                          <span key={idx} className="text-[11px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium">
                             {badge}
                           </span>
                         ))}
                       </div>
 
                       {/* Keywords Preview */}
-                      <p className="mt-2.5 text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                        <strong className="text-slate-300">Keywords:</strong> {role.searchKeywords}
+                      <p className="mt-2.5 text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                        <strong className="text-slate-700 font-semibold">Keywords:</strong> {role.searchKeywords}
                       </p>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-[11px] text-slate-500">
                         {role.skills.split(',').length}+ keahlian &amp; tools
                       </span>
                       <button
                         type="button"
                         onClick={() => handleApplyTemplate(role)}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md hover:shadow-blue-500/20 transition flex items-center gap-1.5"
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs hover:shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                       >
                         <span>Terapkan Template</span>
                       </button>
@@ -2245,14 +2195,14 @@ export default function Home() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs">
-                <span className="text-slate-400">
+              <div className="px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs">
+                <span className="text-slate-500">
                   Daftar keahlian dan kata kunci dapat disesuaikan kembali setelah template diterapkan.
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsTemplateModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
+                  className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-medium border border-slate-200 transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -2261,335 +2211,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: TUTORIAL SETUP GOOGLE SHEETS */}
-        {isSheetsTutorialOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-              {/* Header */}
-              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-900/50">
-                <div>
-                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    Panduan Setup Google Sheets
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Panduan menghubungkan Google Spreadsheet untuk log lamaran dan database pertanyaan.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSheetsTutorialOpen(false)}
-                  className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1.5 rounded-md hover:bg-slate-800 transition"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Stepper Navigation */}
-              <div className="px-6 py-3 bg-slate-900/80 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
-                {[
-                  { num: 1, title: '1. Aktifkan API' },
-                  { num: 2, title: '2. Service Account' },
-                  { num: 3, title: '3. Buat Sheets & Share' },
-                  { num: 4, title: '4. Ambil ID' },
-                  { num: 5, title: '5. Setup Tab' },
-                ].map((s) => (
-                  <button
-                    key={s.num}
-                    type="button"
-                    onClick={() => setActiveTutorialStep(s.num)}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
-                      activeTutorialStep === s.num
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    <span>{s.title}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Step Content */}
-              <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-300 leading-relaxed">
-                {activeTutorialStep === 1 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-blue-300 mb-1">
-                        Langkah 1: Buat Project &amp; Aktifkan Google Sheets API
-                      </h4>
-                      <p className="text-slate-300">
-                        Google Cloud Console adalah tempat membuat integrasi resmi dengan Google Spreadsheet.
-                      </p>
-                    </div>
-
-                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
-                      <li>
-                        Buka{' '}
-                        <a
-                          href="https://console.cloud.google.com"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-400 hover:underline font-semibold"
-                        >
-                          Google Cloud Console (console.cloud.google.com) ↗
-                        </a>{' '}
-                        dan login dengan akun Google Anda.
-                      </li>
-                      <li>
-                        Klik dropdown project di kiri atas, lalu klik <strong>&quot;New Project&quot;</strong>.
-                      </li>
-                      <li>
-                        Beri nama project (misal: <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">cv-blaster-app</code>) lalu klik <strong>Create</strong>.
-                      </li>
-                      <li>
-                        Buka menu samping kiri ☰ → <strong>APIs &amp; Services</strong> → <strong>Library</strong>.
-                      </li>
-                      <li>
-                        Cari <strong>&quot;Google Sheets API&quot;</strong> pada kolom pencarian, klik hasil pencarian, lalu klik tombol <strong>&quot;Enable&quot;</strong>.
-                      </li>
-                    </ol>
-                  </div>
-                )}
-
-                {activeTutorialStep === 2 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-emerald-300 mb-1">
-                        Langkah 2: Buat Service Account &amp; Download credentials.json
-                      </h4>
-                      <p className="text-slate-300">
-                        Service Account berfungsi sebagai akun otomatis yang diberi izin untuk menulis data riwayat lamaran ke spreadsheet Anda.
-                      </p>
-                    </div>
-
-                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
-                      <li>
-                        Buka menu samping kiri ☰ → <strong>IAM &amp; Admin</strong> → <strong>Service Accounts</strong>.
-                      </li>
-                      <li>
-                        Klik tombol <strong>&quot;+ Create Service Account&quot;</strong> di bagian atas.
-                      </li>
-                      <li>
-                        Isi nama (misal: <code className="bg-slate-900 px-1 py-0.5 rounded text-emerald-300">cv-blaster-bot</code>), lalu klik <strong>Create and Continue</strong> → klik <strong>Done</strong>.
-                      </li>
-                      <li>
-                        Pada daftar service account, klik email service account yang baru saja dibuat.
-                      </li>
-                      <li>
-                        Buka tab <strong>&quot;Keys&quot;</strong> di bagian atas → klik <strong>&quot;Add Key&quot;</strong> → pilih <strong>&quot;Create new key&quot;</strong>.
-                      </li>
-                      <li>
-                        Pilih tipe key <strong>JSON</strong>, lalu klik <strong>Create</strong>. File <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">credentials.json</code> akan otomatis terunduh ke komputer Anda.
-                      </li>
-                      <li>
-                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> tersebut, <strong>copy seluruh teksnya</strong>, dan paste ke form <strong>Google Credentials JSON</strong> di CV Blaster.
-                      </li>
-                    </ol>
-                  </div>
-                )}
-
-                {activeTutorialStep === 3 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-purple-300 mb-1">
-                        Langkah 3: Buat Google Spreadsheet Baru &amp; Share Akses
-                      </h4>
-                      <p className="text-slate-300">
-                        Spreadsheet Anda harus dibagikan ke email Service Account agar bot memiliki izin menulis log.
-                      </p>
-                    </div>
-
-                    <ol className="list-decimal list-inside space-y-2.5 text-slate-300">
-                      <li>
-                        Buka file <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">.json</code> yang Anda download di Langkah 2, cari baris <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">&quot;client_email&quot;</code>.
-                        <div className="mt-1.5 p-2 bg-slate-900 rounded font-mono text-[11px] text-slate-400">
-                          Contoh: <span className="text-emerald-400">cv-blaster-bot@project-123.iam.gserviceaccount.com</span>
-                        </div>
-                      </li>
-                      <li>
-                        Buka{' '}
-                        <a
-                          href="https://sheets.new"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-400 hover:underline font-semibold"
-                        >
-                          Google Sheets Baru (sheets.new) ↗
-                        </a>{' '}
-                        di browser Anda.
-                      </li>
-                      <li>
-                        Beri judul spreadsheet Anda (misal: <strong>Riwayat CV Blaster</strong>).
-                      </li>
-                      <li>
-                        Klik tombol <strong>&quot;Share&quot; (Bagikan)</strong> di pojok kanan atas spreadsheet.
-                      </li>
-                      <li>
-                        Paste alamat email Service Account (<code className="bg-slate-900 px-1 py-0.5 rounded text-emerald-400">client_email</code>) ke kolom sharing.
-                      </li>
-                      <li>
-                        Pastikan role akses dipilih <strong>&quot;Editor&quot;</strong>, hilangkan centang <em>Notify people</em>, lalu klik <strong>Send / Share</strong>.
-                      </li>
-                    </ol>
-                  </div>
-                )}
-
-                {activeTutorialStep === 4 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-amber-300 mb-1">
-                        Langkah 4: Ambil Google Spreadsheet ID
-                      </h4>
-                      <p className="text-slate-300">
-                        Spreadsheet ID adalah kode unik di URL browser Google Sheets Anda.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2 text-slate-300">
-                      <p>1. Perhatikan URL Google Spreadsheet yang sedang Anda buka di browser:</p>
-                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg font-mono text-[11px] break-all">
-                        https://docs.google.com/spreadsheets/d/<span className="bg-amber-500/20 text-amber-300 px-1 py-0.5 rounded font-bold border border-amber-500/40">1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms</span>/edit#gid=0
-                      </div>
-                      <p>
-                        2. Salin kode karakter unik di antara <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/d/</code> dan <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/edit</code> (yang disorot di atas).
-                      </p>
-                      <p>
-                        3. Paste kode tersebut ke input <strong>Google Spreadsheet ID</strong> di tab Konfigurasi CV Blaster.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {activeTutorialStep === 5 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-indigo-950/40 border border-indigo-800/60 rounded-xl">
-                      <h4 className="font-bold text-sm text-indigo-300 mb-1">
-                        Langkah 5: Setup Nama Tab
-                      </h4>
-                      <p className="text-slate-300">
-                        CV Blaster menggunakan 2 tab sheet terpisah untuk menyimpan data riwayat lamaran dan pertanyaan.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Tab 1: Log Lamaran */}
-                      <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-100">
-                            Tab 1: Log Riwayat Lamaran
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 font-mono">
-                            Default: Sheet1
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Menyimpan riwayat perusahaan, posisi, platform, link lowongan, dan status lamaran.
-                        </p>
-                        <div className="pt-1">
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                            Header Kolom:
-                          </span>
-                          <div className="p-2 bg-slate-950 rounded font-mono text-[10px] text-slate-300 break-all">
-                            Timestamp | Company | Job Title | Platform | Job URL | Status
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tab 2: Database Pertanyaan */}
-                      <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-100">
-                            Tab 2: Database Pertanyaan
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                            Default: Sheet2
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Menyimpan knowledge base kuesioner pertanyaan kualifikasi dan jawaban bot.
-                        </p>
-                        <div className="pt-1">
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                            Header Kolom:
-                          </span>
-                          <div className="p-2 bg-slate-950 rounded font-mono text-[10px] text-slate-300 break-all">
-                            Question | Type | Options | Answer
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/50 flex justify-between items-center text-xs">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={activeTutorialStep === 1}
-                    onClick={() => setActiveTutorialStep(prev => Math.max(1, prev - 1))}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 font-medium transition"
-                  >
-                    ← Sebelumnya
-                  </button>
-                  <button
-                    type="button"
-                    disabled={activeTutorialStep === 5}
-                    onClick={() => setActiveTutorialStep(prev => Math.min(5, prev + 1))}
-                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition"
-                  >
-                    Selanjutnya →
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSheetsTutorialOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
-                >
-                  Tutup Panduan
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Peringatan Google Sheets Tidak Terkoneksi */}
-        {sheetsWarning?.open && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-            <div className="bg-slate-900 border border-amber-500/50 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center gap-3 text-amber-400">
-                <svg className="w-6 h-6 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <div>
-                  <h3 className="text-base font-bold text-slate-100">Google Sheets Tidak Terkoneksi</h3>
-                  <p className="text-xs text-amber-400/90 font-medium">Sistem gagal menghubungi server spreadsheet</p>
-                </div>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Bot mendeteksi bahwa sistem tidak dapat terhubung ke Google Sheets saat ini. Jika dilanjutkan, bot akan tetap melamar loker seperti biasa, namun riwayat lamaran <strong>tidak akan tercatat ke Spreadsheet</strong>.
-              </p>
-              <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-rose-300 max-h-36 overflow-y-auto break-all">
-                <span className="text-slate-500 block mb-1 font-semibold">Detail Log Error:</span>
-                {sheetsWarning.error}
-              </div>
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  onClick={() => setSheetsWarning(null)}
-                  className="px-4 py-2 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-                >
-                  Batal &amp; Periksa Koneksi
-                </button>
-                <button
-                  onClick={() => executeStartBot(sheetsWarning.mode)}
-                  className="px-4 py-2 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-lg transition"
-                >
-                  Tetap Lanjutkan (Tanpa Sheets)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* End of Modals */}
       </main>
     </div>
   );

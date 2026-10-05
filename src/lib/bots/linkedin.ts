@@ -1,4 +1,4 @@
-import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
+import { isJobAlreadyApplied, addAppliedJob } from '../storage';
 import { answerQuestion } from '../questionAnswer';
 
 export interface BotMetrics {
@@ -121,10 +121,10 @@ export async function runLinkedinBot(
 
         const targetJobUrl = `https://www.linkedin.com/jobs/view/${targetJobId}/`;
 
-        // 1. Cek riwayat Google Sheets terlebih dahulu
-        const alreadyInSheets = await isJobAlreadyApplied(targetJobUrl);
-        if (alreadyInSheets) {
-          onLog(`⏩ [${i + 1}/${totalJobs}] Lowongan ID: ${targetJobId} - Sudah tercatat di riwayat Google Sheets. Melewati...`);
+        // 1. Cek riwayat penyimpanan lokal terlebih dahulu
+        const alreadyInStorage = await isJobAlreadyApplied(targetJobUrl);
+        if (alreadyInStorage) {
+          onLog(`⏩ [${i + 1}/${totalJobs}] Lowongan ID: ${targetJobId} - Sudah tercatat di riwayat penyimpanan lokal. Melewati...`);
           alreadyAppliedCount++;
           continue;
         }
@@ -638,15 +638,7 @@ export async function runLinkedinBot(
               });
               await sleep(1000);
 
-              await addAppliedJob({
-                company: activeCompany,
-                title: activeTitle,
-                platform: 'LinkedIn',
-                jobUrl: cardInfo.url,
-                status: 'Dry-run Sim'
-              });
-
-              onLog(`📝 [Dry-run Sim] Data simulasi "${activeCompany}" (${activeTitle}) disimpan ke Google Sheets.`);
+              onLog(`🧪 [Debug Mode] Simulasi Easy Apply selesai untuk "${activeCompany}" (${activeTitle}). Data tidak disimpan ke riwayat agar dapat diuji kembali.`);
               successCount++;
               if (sharedLimiter) sharedLimiter.onJobSuccess();
               reachedFinal = true;
@@ -673,7 +665,7 @@ export async function runLinkedinBot(
                 status: 'Applied'
               });
 
-              onLog(`🎉 Lamaran Easy Apply ke "${activeCompany}" (${activeTitle}) berhasil terkirim & disimpan ke Google Sheets!`);
+              onLog(`🎉 Lamaran Easy Apply ke "${activeCompany}" (${activeTitle}) berhasil terkirim & disimpan ke penyimpanan lokal!`);
               successCount++;
               if (sharedLimiter) sharedLimiter.onJobSuccess();
               reachedFinal = true;

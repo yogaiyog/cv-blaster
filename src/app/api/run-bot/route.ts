@@ -4,7 +4,7 @@ import { startBot } from '@/lib/automation';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const mode = request.nextUrl.searchParams.get('mode') || 'headless';
+  const mode = request.nextUrl.searchParams.get('mode') || 'headful';
   let configOverride = undefined;
   const configParam = request.nextUrl.searchParams.get('config');
   if (configParam) {

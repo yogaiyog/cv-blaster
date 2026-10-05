@@ -46,6 +46,8 @@ next-env.d.ts
 config.json
 config_backup.json
 config*.json
+data/
+/data/
 
 # electron build outputs
 /dist-electron/

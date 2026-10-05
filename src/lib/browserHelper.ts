@@ -64,7 +64,7 @@ export function cleanupStaleProfileLocks(profilePath: string) {
 declare const __non_webpack_require__: any;
 
 export async function launchBrowserWithFallback(
-  mode: 'headless' | 'headful' = 'headless',
+  mode: 'headless' | 'headful' = 'headful',
   onLog?: (msg: string) => void
 ): Promise<LaunchBrowserResult> {
   let puppeteer: any;

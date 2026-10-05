@@ -1,6 +1,6 @@
 {
   "name": "cv-blaster-desktop",
-  "version": "0.1.3",
+  "version": "2.0.0",
   "description": "CV Blaster Automation Desktop Application",
   "author": "Yoga Adi Saputra",
   "main": "electron/main.js",
@@ -18,7 +18,6 @@
     "@anthropic-ai/sdk": "^0.120.0",
     "@google/generative-ai": "^0.24.1",
     "csv-parse": "^7.0.2",
-    "googleapis": "^176.0.0",
     "next": "16.3.2",
     "puppeteer": "^24.43.1",
     "puppeteer-extra": "^3.3.6",

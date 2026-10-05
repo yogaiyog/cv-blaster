@@ -1,31 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAppliedJobs } from '@/lib/googleSheets';
-import { AppConfig, getConfig } from '@/lib/config';
+import { getAppliedJobs, clearAllAppliedJobs } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    let config: AppConfig = getConfig();
-    const configParam = req.nextUrl.searchParams.get('config');
-    if (configParam) {
-      try {
-        config = { ...config, ...JSON.parse(configParam) };
-      } catch {}
-    }
-    const list = await getAppliedJobs(true, config);
+    const list = await getAppliedJobs(true);
     return NextResponse.json({ success: true, data: list });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    const body = await req.json().catch(() => ({}));
-    const config = getConfig(body.config || body);
-    const list = await getAppliedJobs(true, config);
+    const list = await getAppliedJobs(true);
     return NextResponse.json({ success: true, data: list });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    await clearAllAppliedJobs();
+    return NextResponse.json({ success: true, message: 'Riwayat lamaran berhasil dikosongkan.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

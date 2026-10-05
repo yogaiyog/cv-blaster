@@ -1,4 +1,4 @@
-import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
+import { isJobAlreadyApplied, addAppliedJob } from '../storage';
 import { answerQuestion } from '../questionAnswer';
 
 export interface BotMetrics {
@@ -268,26 +268,30 @@ export async function runJobstreetBot(
 
           if (applyBtnStatus.isAlreadyApplied) {
             onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Sudah pernah dilamar sebelumnya (${applyBtnStatus.text}): ${url}`);
-            await addAppliedJob({ 
-              company: jobDetails.company || 'Jobstreet Company', 
-              title: jobDetails.title || 'Jobstreet Job', 
-              platform: 'Jobstreet', 
-              jobUrl: url, 
-              status: 'Already Applied' 
-            });
+            if (!config.debugTest) {
+              await addAppliedJob({ 
+                company: jobDetails.company || 'Jobstreet Company', 
+                title: jobDetails.title || 'Jobstreet Job', 
+                platform: 'Jobstreet', 
+                jobUrl: url, 
+                status: 'Already Applied' 
+              });
+            }
             alreadyAppliedCount++;
             continue;
           }
 
           if (applyBtnStatus.isExternal) {
             onLog(`[Worker ${workerId + 1}] ⏩ Jobstreet: Dilewati (${applyBtnStatus.externalReason || 'Pendaftaran Eksternal / "Daftar"'}): ${url}`);
-            await addAppliedJob({ 
-              company: jobDetails.company || 'Jobstreet Company', 
-              title: jobDetails.title || 'Jobstreet Job', 
-              platform: 'Jobstreet', 
-              jobUrl: url, 
-              status: 'Skipped (External / Daftar)' 
-            });
+            if (!config.debugTest) {
+              await addAppliedJob({ 
+                company: jobDetails.company || 'Jobstreet Company', 
+                title: jobDetails.title || 'Jobstreet Job', 
+                platform: 'Jobstreet', 
+                jobUrl: url, 
+                status: 'Skipped (External / Daftar)' 
+              });
+            }
             alreadyAppliedCount++;
             continue;
           }
@@ -661,14 +665,7 @@ export async function runJobstreetBot(
 
           // Record job application outcome
           if (config.debugTest) {
-            await addAppliedJob({ 
-              company: jobDetails.company || 'Jobstreet Company', 
-              title: jobDetails.title || 'Jobstreet Job', 
-              platform: 'Jobstreet', 
-              jobUrl: url, 
-              status: 'Dry-run Sim' 
-            });
-            onLog(`[Worker ${workerId + 1}] 📝 [Dry-run Sim] Data "${jobDetails.title}" dicatat ke riwayat Google Sheets.`);
+            onLog(`[Worker ${workerId + 1}] 🧪 [Debug Mode] Simulasi selesai untuk "${jobDetails.title}". Data tidak disimpan ke riwayat agar dapat diuji kembali.`);
           } else {
             onLog(`[Worker ${workerId + 1}] 🎉 Berhasil melamar pekerjaan: ${jobDetails.title}`);
             await addAppliedJob({ 
@@ -898,12 +895,12 @@ export async function syncJobstreetApplicationStatuses(
         return false;
       });
 
-      // Update progres ke Google Sheets setiap 5 halaman
+      // Update progres ke penyimpanan lokal setiap 5 halaman
       if (onBatchExtracted && pageNum % 5 === 0 && allApplications.length > 0) {
         try {
           await onBatchExtracted(allApplications, pageNum);
         } catch (batchErr: any) {
-          onLog(`Kendala saat menyimpan batch progres ke Google Sheets: ${batchErr.message || batchErr}`);
+          onLog(`Kendala saat menyimpan batch progres ke penyimpanan lokal: ${batchErr.message || batchErr}`);
         }
       }
 

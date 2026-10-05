@@ -1,4 +1,4 @@
-import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
+import { isJobAlreadyApplied, addAppliedJob } from '../storage';
 import { answerQuestion } from '../questionAnswer';
 
 export interface BotMetrics {
@@ -427,10 +427,10 @@ export async function runGlintsBot(
             continue;
           }
 
-          // 2. Cek apakah sudah ada di Google Sheets
-          const alreadyInSheets = await isJobAlreadyApplied(targetJob.url);
-          if (alreadyInSheets) {
-            workerLog(`⏩ Melewati "${targetJob.title}" - Sudah tercatat di riwayat Google Sheets.`);
+          // 2. Cek apakah sudah ada di penyimpanan lokal
+          const alreadyInStorage = await isJobAlreadyApplied(targetJob.url);
+          if (alreadyInStorage) {
+            workerLog(`⏩ Melewati "${targetJob.title}" - Sudah tercatat di riwayat penyimpanan lokal.`);
             alreadyAppliedCount++;
             continue;
           }
@@ -775,15 +775,7 @@ export async function runGlintsBot(
                   });
                   await sleep(800);
 
-                  await addAppliedJob({
-                    company: activeCompanyName,
-                    title: activeJobTitle,
-                    platform: 'Glints',
-                    jobUrl: targetJob.url,
-                    status: 'Dry-run Sim'
-                  });
-
-                  workerLog(`📝 [Dry-run Sim] Data simulasi "${activeCompanyName}" (${activeJobTitle}) dicatat ke Google Sheets!`);
+                  workerLog(`🧪 [Debug Mode] Simulasi selesai untuk "${activeCompanyName}" (${activeJobTitle}). Data tidak disimpan ke riwayat agar dapat diuji kembali.`);
                   successCount++;
                   if (sharedLimiter) sharedLimiter.onJobSuccess();
                   reachedFinal = true;
@@ -805,7 +797,7 @@ export async function runGlintsBot(
                     status: 'Applied'
                   });
 
-                  workerLog(`🎉 Lamaran ke "${activeCompanyName}" (${activeJobTitle}) berhasil dikirim & disimpan ke Google Sheets!`);
+                  workerLog(`🎉 Lamaran ke "${activeCompanyName}" (${activeJobTitle}) berhasil dikirim & disimpan ke penyimpanan lokal!`);
                   successCount++;
                   if (sharedLimiter) sharedLimiter.onJobSuccess();
                   reachedFinal = true;
@@ -1060,12 +1052,12 @@ export async function syncGlintsApplicationStatuses(
         break;
       }
 
-      // Update progres ke Google Sheets setiap 5 halaman
+      // Update progres ke penyimpanan lokal setiap 5 halaman
       if (onBatchExtracted && pageNum % 5 === 0 && allApplications.length > 0) {
         try {
           await onBatchExtracted(allApplications, pageNum);
         } catch (batchErr: any) {
-          onLog(`⚠️ Kendala saat menyimpan batch progres ke Google Sheets: ${batchErr.message || batchErr}`);
+          onLog(`⚠️ Kendala saat menyimpan batch progres ke penyimpanan lokal: ${batchErr.message || batchErr}`);
         }
       }
 

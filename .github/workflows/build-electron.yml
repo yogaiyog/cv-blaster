@@ -105,11 +105,36 @@ jobs:
           name: CV-Blaster-macOS-Installer
           path: release-assets/mac
 
+      - name: Extract Release Notes from CHANGELOG.md
+        id: release_notes
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -f CHANGELOG.md ]; then
+            python3 -c "
+import re
+with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
+    content = f.read()
+pattern = r'(## \[(?:v)?' + re.escape('$VERSION') + r'\].*?)(?=\n## \[|\Z)'
+match = re.search(pattern, content, re.DOTALL)
+if match:
+    with open('release_notes.md', 'w', encoding='utf-8') as out:
+        out.write(match.group(1).strip() + '\n')
+else:
+    with open('release_notes.md', 'w', encoding='utf-8') as out:
+        out.write(f'Release v$VERSION\n')
+"
+          else
+            echo "Release v$VERSION" > release_notes.md
+          fi
+          cat release_notes.md
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_tag.outputs.tag }}
           name: Release ${{ steps.get_tag.outputs.tag }}
+          body_path: release_notes.md
           files: |
             release-assets/win/*.exe
             release-assets/mac/*.dmg
@@ -118,3 +143,4 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

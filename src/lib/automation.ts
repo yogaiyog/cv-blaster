@@ -13,7 +13,7 @@ declare global {
 
 export async function startBot(
   onLog: (msg: string) => void,
-  mode: string = 'headless',
+  mode: string = 'headful',
   customConfig?: AppConfig
 ) {
   if (global.isBotRunning) {
@@ -22,7 +22,7 @@ export async function startBot(
   }
 
   global.isBotRunning = true;
-  onLog(`🚀 Starting CV Blaster Engine in ${mode.toUpperCase()} mode...`);
+  onLog(`🚀 Starting CV Blaster Engine...`);
 
   let browser: any = null;
   try {
@@ -63,16 +63,10 @@ export async function startBot(
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    // Test Google Sheets connection
-    onLog('📊 Menguji koneksi ke Google Sheets...');
-    const { testSheetsConnection } = require('./googleSheets');
-    const sheetsTest = await testSheetsConnection(config);
-    if (sheetsTest.success) {
-      onLog(`✅ Google Sheets terhubung: ${sheetsTest.message}`);
-    } else {
-      onLog(`⚠️ Peringatan: Gagal terhubung ke Google Sheets (${sheetsTest.error})`);
-      onLog(`   ℹ️ Lamaran tetap akan diproses, namun riwayat sheets tidak tersimpan jika koneksi terputus.`);
-    }
+    // Initialize and check local storage
+    const { getStorageInfo } = require('./storage');
+    const storageInfo = getStorageInfo();
+    onLog(`💾 Penyimpanan lokal siap: ${storageInfo.appliedJobsCount} lamaran tercatat di ${storageInfo.appliedJobsPath}`);
 
     // Launch browser with Google Chrome priority and Chromium fallback
     const { launchBrowserWithFallback } = require('./browserHelper');
@@ -270,15 +264,15 @@ export async function startBot(
         syncLog('🔄 Memulai sinkronisasi status lamaran Glints...');
         try {
           const { syncGlintsApplicationStatuses } = require('./bots/glints');
-          const { updateGlintsApplicationStatuses } = require('./googleSheets');
+          const { updateGlintsApplicationStatuses } = require('./storage');
 
           let totalSyncedUpdates = 0;
           const allDetails: Array<{ company: string; title: string; oldStatus: string; newStatus: string }> = [];
 
           const onBatchExtracted = async (batch: any[], pageNum: number) => {
             if (batch.length === 0) return;
-            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke Google Sheets...`);
-            const syncRes = await updateGlintsApplicationStatuses(batch, config);
+            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke penyimpanan lokal...`);
+            const syncRes = await updateGlintsApplicationStatuses(batch);
             totalSyncedUpdates += syncRes.updatedCount;
             if (syncRes.details.length > 0) {
               allDetails.push(...syncRes.details);
@@ -287,16 +281,16 @@ export async function startBot(
               }
             }
             if (syncRes.updatedCount > 0) {
-              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di Google Sheets.`);
+              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di penyimpanan lokal.`);
             } else {
-              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di Google Sheets.`);
+              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di penyimpanan lokal.`);
             }
           };
 
           const apps = await syncGlintsApplicationStatuses(pageSync, syncLog, 200, onBatchExtracted);
           if (apps.length > 0) {
             syncLog(`📊 Selesai memindai seluruh riwayat (${apps.length} kartu). Memeriksa sinkronisasi akhir...`);
-            const finalRes = await updateGlintsApplicationStatuses(apps, config);
+            const finalRes = await updateGlintsApplicationStatuses(apps);
             totalSyncedUpdates += finalRes.updatedCount;
             if (finalRes.details.length > 0) {
               allDetails.push(...finalRes.details);
@@ -330,15 +324,15 @@ export async function startBot(
         syncLog('🔄 Memulai sinkronisasi status lamaran Jobstreet...');
         try {
           const { syncJobstreetApplicationStatuses } = require('./bots/jobstreet');
-          const { updateJobstreetApplicationStatuses } = require('./googleSheets');
+          const { updateJobstreetApplicationStatuses } = require('./storage');
 
           let totalSyncedUpdates = 0;
           const allDetails: Array<{ company: string; title: string; oldStatus: string; newStatus: string }> = [];
 
           const onBatchExtracted = async (batch: any[], pageNum: number) => {
             if (batch.length === 0) return;
-            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke Google Sheets...`);
-            const syncRes = await updateJobstreetApplicationStatuses(batch, config);
+            syncLog(`💾 [Batch Halaman ${pageNum}] Menyimpan progres (${batch.length} kartu terpindai) ke penyimpanan lokal...`);
+            const syncRes = await updateJobstreetApplicationStatuses(batch);
             totalSyncedUpdates += syncRes.updatedCount;
             if (syncRes.details.length > 0) {
               allDetails.push(...syncRes.details);
@@ -347,16 +341,16 @@ export async function startBot(
               }
             }
             if (syncRes.updatedCount > 0) {
-              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di Google Sheets.`);
+              syncLog(`💾 [Batch Halaman ${pageNum}] ${syncRes.updatedCount} status berhasil diperbarui di penyimpanan lokal.`);
             } else {
-              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di Google Sheets.`);
+              syncLog(`💾 [Batch Halaman ${pageNum}] Semua status pada batch ini sudah sesuai di penyimpanan lokal.`);
             }
           };
 
           const apps = await syncJobstreetApplicationStatuses(pageSync, syncLog, 100, onBatchExtracted);
           if (apps.length > 0) {
             syncLog(`📊 Selesai memindai seluruh riwayat (${apps.length} kartu). Memeriksa sinkronisasi akhir...`);
-            const finalRes = await updateJobstreetApplicationStatuses(apps, config);
+            const finalRes = await updateJobstreetApplicationStatuses(apps);
             totalSyncedUpdates += finalRes.updatedCount;
             if (finalRes.details.length > 0) {
               allDetails.push(...finalRes.details);

@@ -1,4 +1,4 @@
-import { isJobAlreadyApplied, addAppliedJob } from '../googleSheets';
+import { isJobAlreadyApplied, addAppliedJob } from '../storage';
 import { answerQuestion } from '../questionAnswer';
 import { generateCoverLetter } from '../coverLetterHelper';
 
@@ -152,10 +152,10 @@ export async function runIndeedBot(
 
         const targetJobUrl = `https://id.indeed.com/viewjob?jk=${cardInfo.jobId}`;
 
-        // Cek riwayat Google Sheets
-        const alreadyInSheets = await isJobAlreadyApplied(targetJobUrl);
-        if (alreadyInSheets) {
-          onLog(`⏩ [${i + 1}/${jobCards.length}] Lowongan "${cardInfo.title}" - Sudah tercatat di riwayat Google Sheets. Melewati...`);
+        // Cek riwayat penyimpanan lokal
+        const alreadyInStorage = await isJobAlreadyApplied(targetJobUrl);
+        if (alreadyInStorage) {
+          onLog(`⏩ [${i + 1}/${jobCards.length}] Lowongan "${cardInfo.title}" - Sudah tercatat di riwayat penyimpanan lokal. Melewati...`);
           alreadyAppliedCount++;
           continue;
         }
@@ -769,17 +769,7 @@ export async function runIndeedBot(
             if (formState.isSubmit) {
               if (config.debugTest) {
                 onLog(`🏁 [DEBUG MODE] Form Indeed (${activeTitle}) selesai diisi.`);
-                onLog(`   🛡️ Simulasi berhasil (Lamaran tidak dikirim ke Indeed).`);
-
-                await addAppliedJob({
-                  company: activeCompany,
-                  title: activeTitle,
-                  platform: 'Indeed',
-                  jobUrl: targetJobUrl,
-                  status: 'Dry-run Sim'
-                });
-
-                onLog(`📝 [Dry-run Sim] Data simulasi "${activeCompany}" (${activeTitle}) disimpan ke Google Sheets.`);
+                onLog(`   🛡️ Simulasi berhasil (Lamaran tidak dikirim ke Indeed & tidak dicatat ke riwayat agar dapat diuji kembali).`);
                 successCount++;
                 if (sharedLimiter) sharedLimiter.onJobSuccess();
                 reachedFinal = true;
@@ -805,7 +795,7 @@ export async function runIndeedBot(
                   status: 'Applied'
                 });
 
-                onLog(`🎉 Lamaran Indeed ke "${activeCompany}" (${activeTitle}) berhasil terkirim & disimpan ke Google Sheets!`);
+                onLog(`🎉 Lamaran Indeed ke "${activeCompany}" (${activeTitle}) berhasil terkirim & disimpan ke penyimpanan lokal!`);
                 successCount++;
                 if (sharedLimiter) sharedLimiter.onJobSuccess();
                 reachedFinal = true;

@@ -23,7 +23,7 @@ import fs, { readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AppConfig, getConfig } from "./config";
-import { getQuestionsFromSheet, ScreeningQuestionItem } from "./googleSheets";
+import { getQuestionsFromStorage, appendQuestionToStorage, ScreeningQuestionItem } from "./storage";
 
 const defaultSkills = [
   "JavaScript", "TypeScript", "Python", "Java", "C#", "C++", "PHP", "Go", "HTML", "CSS",
@@ -751,18 +751,16 @@ export async function ensureKnowledgeBaseLoaded(customConfig?: AppConfig): Promi
 
   const cfg = customConfig || getConfig();
 
-  // 1. Priority: Load from Google Sheets (Screening Questions tab)
-  if (cfg.googleCredentialsJson && cfg.spreadsheetId) {
-    try {
-      const sheetQuestions = await getQuestionsFromSheet(false, cfg);
-      if (sheetQuestions.length > 0) {
-        const items = transformQuestionsToCache(sheetQuestions);
-        memoryCache = { timestamp: now, items };
-        return items;
-      }
-    } catch (e) {
-      console.warn('[KnowledgeBase] Failed to fetch from Google Sheets, falling back to local CSV if available:', e);
+  // 1. Priority: Load from local storage
+  try {
+    const storedQuestions = await getQuestionsFromStorage(false);
+    if (storedQuestions.length > 0) {
+      const items = transformQuestionsToCache(storedQuestions);
+      memoryCache = { timestamp: now, items };
+      return items;
     }
+  } catch (e) {
+    console.warn('[KnowledgeBase] Failed to fetch from storage, falling back to local CSV:', e);
   }
 
   // 2. Fallback: Read local imploye-question.csv if exists
@@ -883,16 +881,14 @@ export async function answerQuestion(
     const normType = type as QuestionType;
     const regexAnswer = tryRegexAnswer(question, options, normType, cfg);
     if (regexAnswer !== null) {
-      // Asynchronously learn & append to Google Sheets knowledge base
-      const { appendQuestionToSheet } = require('./googleSheets');
-      appendQuestionToSheet(question, type, options, regexAnswer, cfg).catch(() => {});
+      // Asynchronously learn & append to local storage knowledge base
+      appendQuestionToStorage(question, type, options, regexAnswer).catch(() => {});
       return regexAnswer;
     }
 
     // 3. Fallback: Ask Gemini LLM
     const llmAnswer = await askLLM(question, options, normType, cfg);
-    const { appendQuestionToSheet } = require('./googleSheets');
-    appendQuestionToSheet(question, type, options, llmAnswer, cfg).catch(() => {});
+    appendQuestionToStorage(question, type, options, llmAnswer).catch(() => {});
     return llmAnswer;
   } catch (err) {
     console.error(`AI failed to answer "${question}":`, err);

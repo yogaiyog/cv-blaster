@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 export interface AppConfig {
-  spreadsheetId: string;
-  sheetName: string;
+  spreadsheetId?: string;
+  sheetName?: string;
   questionsSheetName?: string;
-  googleCredentialsJson: string;
+  googleCredentialsJson?: string;
   searchKeywords: string;
   location: string;
   minSalary: string;
@@ -46,10 +46,6 @@ const CONFIG_DIR = process.env.APP_USER_DATA || process.cwd();
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
 export const DEFAULT_CONFIG: AppConfig = {
-  spreadsheetId: '',
-  sheetName: 'Sheet1',
-  questionsSheetName: 'Sheet2',
-  googleCredentialsJson: '',
   geminiApiKey: '',
   searchKeywords: '',
   location: '',
@@ -63,7 +59,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   enableGlints: true,
   enableJobstreet: true,
   enableLinkedin: true,
-  enableIndeed: true,
+  enableIndeed: false,
   syncGlintsStatus: false,
   syncJobstreetStatus: false,
   indeedNoJobTitleFilter: false,
