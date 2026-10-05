@@ -223,6 +223,18 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isBotRunning, setIsBotRunning] = useState(false);
   const [isSetupBrowserRunning, setIsSetupBrowserRunning] = useState(false);
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [setupBrowserLoading, setSetupBrowserLoading] = useState(false);
+  const [setupActionMsg, setSetupActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [authErrorModal, setAuthErrorModal] = useState<{
+    isOpen: boolean;
+    platform: string;
+    message: string;
+  }>({
+    isOpen: false,
+    platform: '',
+    message: ''
+  });
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -617,25 +629,84 @@ export default function Home() {
     }
   };
 
-  const handleToggleSetupBrowser = async () => {
+  const handleLaunchCleanBrowser = async () => {
+    setSetupBrowserLoading(true);
+    setSetupActionMsg(null);
     try {
-      const action = isSetupBrowserRunning ? 'stop' : 'start';
       const res = await fetch('/api/setup-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: 'start' }),
       });
       const data = await res.json();
       if (data.success) {
-        setIsSetupBrowserRunning(!isSetupBrowserRunning);
-        if (action === 'start') {
-          alert(data.message || 'Browser berhasil dibuka.');
-        }
+        setIsSetupBrowserRunning(true);
+        setSetupActionMsg({ type: 'success', text: data.message || 'Browser berhasil dibuka.' });
       } else {
-        alert(data.error || 'Terjadi kesalahan saat memicu browser.');
+        setSetupActionMsg({ type: 'error', text: data.error || 'Gagal membuka browser.' });
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setSetupActionMsg({ type: 'error', text: e.message || 'Terjadi kesalahan sistem.' });
+    } finally {
+      setSetupBrowserLoading(false);
+    }
+  };
+
+  const handleStopBrowser = async () => {
+    setSetupBrowserLoading(true);
+    setSetupActionMsg(null);
+    try {
+      const res = await fetch('/api/setup-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSetupBrowserRunning(false);
+        setSetupActionMsg({ type: 'success', text: data.message || 'Browser berhasil ditutup.' });
+      } else {
+        setSetupActionMsg({ type: 'error', text: data.error || 'Gagal menutup browser.' });
+      }
+    } catch (e: any) {
+      setSetupActionMsg({ type: 'error', text: e.message || 'Terjadi kesalahan sistem.' });
+    } finally {
+      setSetupBrowserLoading(false);
+    }
+  };
+
+  const handleOpenPortal = async (portalUrl: string | string[]) => {
+    setSetupBrowserLoading(true);
+    setSetupActionMsg(null);
+    try {
+      const payload = Array.isArray(portalUrl)
+        ? { action: 'start', urls: portalUrl }
+        : { action: 'start', url: portalUrl };
+
+      const res = await fetch('/api/setup-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSetupBrowserRunning(true);
+        setSetupActionMsg({ type: 'success', text: data.message || 'Halaman portal berhasil dibuka di browser.' });
+      } else {
+        setSetupActionMsg({ type: 'error', text: data.error || 'Gagal membuka portal.' });
+      }
+    } catch (e: any) {
+      setSetupActionMsg({ type: 'error', text: e.message || 'Terjadi kesalahan sistem.' });
+    } finally {
+      setSetupBrowserLoading(false);
+    }
+  };
+
+  const handleToggleSetupBrowser = async () => {
+    if (isSetupBrowserRunning) {
+      await handleStopBrowser();
+    } else {
+      await handleLaunchCleanBrowser();
     }
   };
 
@@ -664,14 +735,36 @@ export default function Home() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        setLogs((prev) => [...prev, `[${new Date(data.timestamp).toLocaleTimeString()}] ${data.message}`]);
+        const logMsg = data.message || '';
+        setLogs((prev) => [...prev, `[${new Date(data.timestamp).toLocaleTimeString()}] ${logMsg}`]);
+
+        // Detect if bot encountered an unauthenticated / not logged in error
+        if (
+          logMsg.includes('AUTH_REQUIRED') ||
+          (logMsg.toLowerCase().includes('belum login') && (logMsg.toLowerCase().includes('glints') || logMsg.toLowerCase().includes('jobstreet') || logMsg.toLowerCase().includes('linkedin') || logMsg.toLowerCase().includes('indeed'))) ||
+          logMsg.toLowerCase().includes('not logged in')
+        ) {
+          let detectedPlatform = 'Portal Karir';
+          if (/linkedin/i.test(logMsg)) detectedPlatform = 'LinkedIn';
+          else if (/jobstreet/i.test(logMsg)) detectedPlatform = 'Jobstreet';
+          else if (/glints/i.test(logMsg)) detectedPlatform = 'Glints';
+          else if (/indeed/i.test(logMsg)) detectedPlatform = 'Indeed';
+
+          const cleanMsg = logMsg.replace(/\[ERROR\]\s*|\[AUTH_REQUIRED\]\s*|⚠️\s*/g, '').trim();
+
+          setAuthErrorModal({
+            isOpen: true,
+            platform: detectedPlatform,
+            message: cleanMsg
+          });
+        }
       } catch (e) {
         console.error('Failed to parse SSE event:', e);
       }
     };
 
     eventSource.onerror = () => {
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] 🔌 Connection closed.`]);
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] [INFO] Sesi bot selesai / koneksi ditutup.`]);
       setIsBotRunning(false);
       eventSource.close();
       fetchAppliedHistory();
@@ -740,14 +833,24 @@ export default function Home() {
           {/* Setup Browser Button */}
           <button
             type="button"
-            onClick={handleToggleSetupBrowser}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer shadow-xs ${
+            onClick={() => {
+              setIsSetupModalOpen(true);
+              setSetupActionMsg(null);
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer shadow-xs flex items-center gap-2 ${
               isSetupBrowserRunning
-                ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
                 : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'
             }`}
           >
-            {isSetupBrowserRunning ? 'Tutup Browser' : 'Buka Browser'}
+            {isSetupBrowserRunning ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            ) : (
+              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            )}
+            <span>{isSetupBrowserRunning ? 'Browser Aktif (Setup Login)' : 'Buka Browser (Setup Login)'}</span>
           </button>
 
           {/* Bot Control Button */}
@@ -2312,6 +2415,311 @@ export default function Home() {
                   className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-medium border border-slate-200 transition cursor-pointer"
                 >
                   Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: SETUP LOGIN AKUN (PORTAL KARIR) */}
+        {isSetupModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Setup Login Akun Portal Karir
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Kelola sesi login LinkedIn, Glints, dan Jobstreet pada browser sistem untuk kebutuhan automasi.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSetupModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-600">
+                {/* Notice / Warning Banner */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-amber-100 text-amber-700 shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-900">
+                      Pastikan Sudah Login Sebelum Menjalankan Bot!
+                    </h4>
+                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                      Bot automasi CV Blaster akan menggunakan data sesi yang tersimpan di jendela browser ini untuk melamar lowongan kerja secara otomatis. Pastikan Anda sudah login ke akun Google, LinkedIn, Glints, atau Jobstreet sebelum menekan tombol Jalankan Bot.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status & Browser Controls */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3.5 h-3.5 rounded-full shrink-0 ${isSetupBrowserRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        Status Browser: {isSetupBrowserRunning ? 'Sedang Aktif' : 'Tidak Aktif'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {isSetupBrowserRunning
+                          ? 'Browser sistem aktif dengan profil automasi tersinkronisasi.'
+                          : 'Browser belum berjalan. Anda dapat membukanya secara bersih atau memilih portal di bawah.'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isSetupBrowserRunning ? (
+                      <button
+                        type="button"
+                        disabled={setupBrowserLoading}
+                        onClick={handleStopBrowser}
+                        className="px-4 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold border border-rose-300 transition-colors duration-150 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>{setupBrowserLoading ? 'Memproses...' : 'Tutup Browser'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={setupBrowserLoading}
+                        onClick={handleLaunchCleanBrowser}
+                        className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs transition-colors duration-150 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>{setupBrowserLoading ? 'Membuka...' : 'Buka Browser (Tab Bersih)'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Feedback Toast */}
+                {setupActionMsg && (
+                  <div className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                    setupActionMsg.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}>
+                    <span>{setupActionMsg.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSetupActionMsg(null)}
+                      className="text-slate-400 hover:text-slate-600 text-xs font-semibold cursor-pointer"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                )}
+
+                {/* Portal Login Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Buka Halaman Login Portal
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Klik portal di bawah untuk membuka halaman login pada jendela browser automasi.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={setupBrowserLoading}
+                      onClick={() => handleOpenPortal(['https://www.linkedin.com', 'https://glints.com/id', 'https://www.jobstreet.co.id'])}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition cursor-pointer text-xs flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                      </svg>
+                      <span>Buka Semua Sekaligus</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    {/* LinkedIn Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between hover:border-slate-300 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
+                            in
+                          </div>
+                          <span className="font-semibold text-sm text-slate-900">LinkedIn</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                          Login ke akun LinkedIn untuk mengaktifkan automasi pelamaran Easy Apply.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={setupBrowserLoading}
+                        onClick={() => handleOpenPortal('https://www.linkedin.com')}
+                        className="w-full py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors cursor-pointer text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>Buka LinkedIn</span>
+                      </button>
+                    </div>
+
+                    {/* Glints Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between hover:border-slate-300 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xs">
+                            G
+                          </div>
+                          <span className="font-semibold text-sm text-slate-900">Glints</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                          Login ke akun Glints untuk automasi pencarian dan pelamaran lowongan kerja.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={setupBrowserLoading}
+                        onClick={() => handleOpenPortal('https://glints.com/id')}
+                        className="w-full py-2 px-3 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold border border-rose-200 transition-colors cursor-pointer text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>Buka Glints</span>
+                      </button>
+                    </div>
+
+                    {/* Jobstreet Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between hover:border-slate-300 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                            JS
+                          </div>
+                          <span className="font-semibold text-sm text-slate-900">Jobstreet</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                          Login ke akun Jobstreet untuk automasi pelamaran lowongan SEEK Jobstreet.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={setupBrowserLoading}
+                        onClick={() => handleOpenPortal('https://www.jobstreet.co.id')}
+                        className="w-full py-2 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold border border-indigo-200 transition-colors cursor-pointer text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>Buka Jobstreet</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tips Box */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-600">
+                  <div className="font-semibold text-slate-800 mb-1">Tips Sesi Browser Automasi:</div>
+                  <ul className="list-disc list-inside space-y-1 text-slate-500">
+                    <li>Browser berjalan langsung sebagai Google Chrome / Edge resmi tanpa bot otomatisasi, sehingga login akun Google diterima aman tanpa pemblokiran.</li>
+                    <li>Setelah berhasil login ke platform, sesi login tersimpan secara permanen. Anda dapat membiarkan jendela browser tetap terbuka atau menutupnya sebelum memulai bot.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs">
+                <span className="text-slate-500">
+                  Profil tersimpan di <code className="text-slate-700 bg-slate-200/60 px-1 py-0.5 rounded font-mono text-[11px]">automation-profile</code>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSetupModalOpen(false)}
+                  className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium transition cursor-pointer shadow-xs"
+                >
+                  Selesai
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ERROR BELUM LOGIN */}
+        {authErrorModal.isOpen && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-scale-in">
+              {/* Header with warning accent */}
+              <div className="p-6 bg-gradient-to-b from-amber-50/80 to-white border-b border-slate-100 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                    Autentikasi Diperlukan
+                  </span>
+                  <h3 className="text-base font-bold text-slate-900 mt-0.5">
+                    Akun Belum Login ({authErrorModal.platform})
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Bot automasi tidak dapat melamar pekerjaan karena sesi login belum aktif.
+                  </p>
+                </div>
+              </div>
+
+              {/* Body content */}
+              <div className="p-6 space-y-4 text-xs text-slate-600">
+                <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 leading-relaxed text-amber-900">
+                  {authErrorModal.message || `Sesi login pada platform ${authErrorModal.platform} tidak ditemukan. Silakan login terlebih dahulu agar bot dapat memproses lamaran kerja.`}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="font-semibold text-slate-800">Langkah untuk melanjutkan:</div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600">
+                    <li>Klik tombol <strong>Buka Setup Login</strong> di bawah.</li>
+                    <li>Buka halaman login dan masuk ke akun {authErrorModal.platform} Anda.</li>
+                    <li>Setelah login berhasil, tutup browser atau kembali ke dashboard ini lalu jalankan ulang bot.</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setAuthErrorModal({ isOpen: false, platform: '', message: '' })}
+                  className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold border border-slate-200 transition text-xs cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthErrorModal({ isOpen: false, platform: '', message: '' });
+                    setIsSetupModalOpen(true);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <span>Buka Setup Login Sekarang</span>
                 </button>
               </div>
             </div>

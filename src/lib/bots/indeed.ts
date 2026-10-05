@@ -56,8 +56,8 @@ export async function runIndeedBot(
 
     const currentUrl = page.url();
     if (currentUrl.includes('/account/login') || currentUrl.includes('/auth') || !isLoggedIn) {
-      onLog('⚠️ Indeed: Belum login! Silakan klik tombol "Buka Browser (Login Setup)" di Dashboard untuk login Indeed terlebih dahulu.');
-      return { successCount, alreadyAppliedCount, errorCount };
+      onLog('[ERROR] [AUTH_REQUIRED] Indeed: Belum login! Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
+      return { successCount, alreadyAppliedCount, errorCount: errorCount + 1 };
     }
 
     onLog('✅ Indeed: Akun terverifikasi dan sesi login aktif.');

@@ -35,6 +35,17 @@ export async function runGlintsBot(
     onLog(`📍 Halaman saat ini: "${pageTitle}"`);
     onLog(`🔗 URL saat ini: ${currentUrl}`);
 
+    // Pengecekan status login Glints
+    const isGlintsLoggedIn = await page.evaluate(() => {
+      return !!document.querySelector('[data-cy="user-avatar"], [class*="UserAvatar"], a[href*="/user/profile"], [class*="AccountDropdown"]') ||
+             !document.querySelector('a[href*="/login"], a[href*="/signup"], button[data-testid="login-button"]');
+    });
+
+    if (currentUrl.includes('/login') || currentUrl.includes('/signup') || !isGlintsLoggedIn) {
+      onLog('[ERROR] [AUTH_REQUIRED] Glints: Belum login! Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
+      return { successCount, alreadyAppliedCount, errorCount: errorCount + 1 };
+    }
+
     // Analisa elemen input di halaman
     onLog('🔍 Memeriksa elemen input pencarian...');
     const inputAnalysis = await page.evaluate(() => {
@@ -885,8 +896,8 @@ export async function syncGlintsApplicationStatuses(
 
       const currentUrl = page.url();
       if (currentUrl.includes('/login') || currentUrl.includes('/signup')) {
-        onLog('⚠️ Sesi login Glints tidak ditemukan. Anda harus login terlebih dahulu.');
-        throw new Error('Akun belum login ke Glints. Silakan login melalui tombol "Buka Browser (Login Setup)" di Dashboard terlebih dahulu.');
+        onLog('[ERROR] [AUTH_REQUIRED] Sesi login Glints tidak ditemukan. Anda harus login terlebih dahulu.');
+        throw new Error('AUTH_REQUIRED: Akun belum login ke Glints. Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
       }
 
       // Scroll sedikit ke bawah untuk memicu lazy-load jika ada

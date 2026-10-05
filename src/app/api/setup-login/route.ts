@@ -15,7 +15,10 @@ declare global {
 
 export async function POST(request: Request) {
   try {
-    const { action } = await request.json();
+    const body = await request.json();
+    const action = body.action || 'start';
+    const targetUrl = body.url;
+    const targetUrls = body.urls;
     const profilePath = getProfilePath();
 
     if (action === 'stop') {
@@ -43,24 +46,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Check if browser is already running
-    if (global.activeSetupProcess) {
-      try {
-        process.kill(global.activeSetupProcess.pid, 0);
-        return NextResponse.json({
-          success: false,
-          error: 'Browser sudah terbuka. Silakan gunakan atau tutup terlebih dahulu.'
-        }, { status: 400 });
-      } catch {
-        global.activeSetupProcess = null;
-      }
-    }
-
-    // Sync any existing profiles and clean up stale locks
-    syncProfileIfEmpty();
-    terminateOrphanedProfileProcesses(profilePath);
-    cleanupStaleProfileLocks(profilePath);
-
     const config = getConfig();
     const customBrowser = config.customChromePath ? config.customChromePath.trim() : '';
     const browserExecutable = customBrowser || findNativeBrowserPath();
@@ -72,7 +57,47 @@ export async function POST(request: Request) {
       }, { status: 404 });
     }
 
-    // Launch native browser directly without Puppeteer and without opening any URL tabs
+    // Check if browser process is already alive
+    let isAlreadyRunning = false;
+    if (global.activeSetupProcess) {
+      try {
+        process.kill(global.activeSetupProcess.pid, 0);
+        isAlreadyRunning = true;
+      } catch {
+        global.activeSetupProcess = null;
+      }
+    }
+
+    // If browser is already running
+    if (isAlreadyRunning) {
+      const urlsToOpen = (targetUrls && Array.isArray(targetUrls) && targetUrls.length > 0)
+        ? targetUrls
+        : targetUrl
+        ? [targetUrl]
+        : [];
+
+      if (urlsToOpen.length > 0) {
+        spawn(browserExecutable, [`--user-data-dir=${profilePath}`, ...urlsToOpen], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref();
+        return NextResponse.json({
+          success: true,
+          message: 'Halaman portal berhasil dibuka di browser.'
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Browser sudah aktif.'
+      });
+    }
+
+    // If browser is not running, launch fresh
+    syncProfileIfEmpty();
+    terminateOrphanedProfileProcesses(profilePath);
+    cleanupStaleProfileLocks(profilePath);
+
     const browserArgs = [
       `--user-data-dir=${profilePath}`,
       '--no-first-run',
@@ -80,7 +105,13 @@ export async function POST(request: Request) {
       '--window-size=1280,800'
     ];
 
-    console.log(`[SetupLogin] Meluncurkan browser sistem secara native: ${browserExecutable}`);
+    if (targetUrls && Array.isArray(targetUrls) && targetUrls.length > 0) {
+      browserArgs.push(...targetUrls);
+    } else if (targetUrl) {
+      browserArgs.push(targetUrl);
+    }
+
+    console.log(`[SetupLogin] Meluncurkan browser sistem: ${browserExecutable}`);
     const child = spawn(browserExecutable, browserArgs, {
       detached: true,
       stdio: 'ignore'

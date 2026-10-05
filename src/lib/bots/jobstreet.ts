@@ -31,8 +31,8 @@ export async function runJobstreetBot(
   });
 
   if (!isLoggedIn) {
-    onLog('⚠️ Jobstreet: Not logged in! Please click "Buka Browser (Login Setup)" to login first.');
-    return { successCount, alreadyAppliedCount, errorCount };
+    onLog('[ERROR] [AUTH_REQUIRED] Jobstreet: Belum login! Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
+    return { successCount, alreadyAppliedCount, errorCount: errorCount + 1 };
   }
   onLog('✅ Jobstreet: Logged in successfully.');
 
@@ -747,8 +747,8 @@ export async function syncJobstreetApplicationStatuses(
 
       const currentUrl = page.url();
       if (currentUrl.includes('/login') || currentUrl.includes('/sign-in') || currentUrl.includes('oauth')) {
-        onLog('Sesi login Jobstreet tidak ditemukan. Silakan login terlebih dahulu melalui tombol "Buka Browser (Login Setup)".');
-        throw new Error('Akun belum login ke Jobstreet. Silakan login melalui tombol "Buka Browser (Login Setup)" di Dashboard terlebih dahulu.');
+        onLog('[ERROR] [AUTH_REQUIRED] Sesi login Jobstreet tidak ditemukan. Silakan login terlebih dahulu melalui tombol "Buka Browser (Setup Login)".');
+        throw new Error('AUTH_REQUIRED: Akun belum login ke Jobstreet. Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
       }
 
       // Scroll sedikit ke bawah untuk memicu lazy load

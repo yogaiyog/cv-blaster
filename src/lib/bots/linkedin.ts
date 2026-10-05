@@ -49,8 +49,8 @@ export async function runLinkedinBot(
 
     const currentUrl = page.url();
     if (currentUrl.includes('/login') || currentUrl.includes('/signup') || currentUrl.includes('/checkpoint') || !isLoggedIn) {
-      onLog('⚠️ LinkedIn: Belum login! Silakan klik tombol "Buka Browser (Login Setup)" di Dashboard untuk login LinkedIn terlebih dahulu.');
-      return { successCount, alreadyAppliedCount, errorCount };
+      onLog('[ERROR] [AUTH_REQUIRED] LinkedIn: Belum login! Silakan login melalui tombol "Buka Browser (Setup Login)" di Dashboard terlebih dahulu.');
+      return { successCount, alreadyAppliedCount, errorCount: errorCount + 1 };
     }
 
     onLog('✅ LinkedIn: Akun terverifikasi dan sesi login aktif.');
