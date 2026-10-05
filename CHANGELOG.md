@@ -9,7 +9,7 @@ Semua perubahan penting pada proyek CV Blaster akan dicatat dalam berkas ini.
 #### 1. Penyimpanan Lokal Mandiri (Offline-First / Zero Google Sheets)
 - **Database Mandiri**: Menghilangkan sepenuhnya dependensi terhadap Google Sheets API dan Google Cloud Service Account.
 - **Penyimpanan Lokal Cepat**: Riwayat lamaran dan bank pertanyaan kini disimpan langsung di disk lokal dalam format JSON terstruktur (`applied-jobs.json` & `screening-questions.json`).
-- **Export & Import CSV**: Memungkinkan pencadangan (*backup*) dan pemulihan (*restore*) riwayat lamaran kapan saja langsung melalui file CSV.
+- **Export & Import CSV Lengkap**: Memungkinkan pencadangan (*backup*) dan pemulihan (*restore*) baik riwayat lamaran maupun seluruh bank pertanyaan kuesioner (*screening questions*) secara terpisah langsung melalui format file CSV.
 - **Privasi Terjaga**: Folder data lokal (`data/`) otomatis diabaikan oleh Git (`.gitignore`) untuk melindungi data pribadi pelamar.
 
 #### 2. Redesain Antarmuka Total (UI/UX Pro Max Standard)

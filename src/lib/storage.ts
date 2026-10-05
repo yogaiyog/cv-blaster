@@ -711,6 +711,104 @@ export async function importAppliedJobsFromCsv(
   };
 }
 
+export async function exportQuestionsToCsv(): Promise<string> {
+  const questions = await getQuestionsFromStorage(true);
+  const headers = ['Pertanyaan', 'Tipe', 'Pilihan Opsi', 'Jawaban', 'Terakhir Diperbarui'];
+
+  const rows = questions.map((q) => [
+    escapeCsvField(q.question),
+    escapeCsvField(q.type || 'text'),
+    escapeCsvField(q.options || ''),
+    escapeCsvField(q.answer || ''),
+    escapeCsvField(q.updatedAt || ''),
+  ]);
+
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+}
+
+export async function importQuestionsFromCsv(
+  csvContent: string
+): Promise<{ importedCount: number; updatedCount: number; totalCount: number }> {
+  if (!csvContent || !csvContent.trim()) {
+    throw new Error('Konten CSV kosong.');
+  }
+
+  const records: string[][] = parse(csvContent, {
+    columns: false,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    relax_quotes: true,
+  });
+
+  if (records.length <= 1) {
+    return { importedCount: 0, updatedCount: 0, totalCount: (await getQuestionsFromStorage()).length };
+  }
+
+  const existingQuestions = await getQuestionsFromStorage(true);
+  const questionMap = new Map<string, ScreeningQuestionItem>();
+  for (const q of existingQuestions) {
+    questionMap.set(q.question.trim().toLowerCase(), q);
+  }
+
+  let importedCount = 0;
+  let updatedCount = 0;
+  const nowStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+
+  for (let i = 1; i < records.length; i++) {
+    const row = records[i];
+    if (!row || row.length === 0) continue;
+
+    const question = (row[0] || '').trim();
+    if (!question) continue;
+
+    const type = (row[1] || 'text').trim();
+    const options = (row[2] || '').trim();
+    const answer = (row[3] || '').trim();
+
+    const key = question.toLowerCase();
+    const existing = questionMap.get(key);
+
+    if (existing) {
+      let isChanged = false;
+      if (answer && existing.answer !== answer) {
+        existing.answer = answer;
+        isChanged = true;
+      }
+      if (options && existing.options !== options) {
+        existing.options = options;
+        isChanged = true;
+      }
+      if (type && existing.type !== type) {
+        existing.type = type;
+        isChanged = true;
+      }
+      if (isChanged) {
+        existing.updatedAt = nowStr;
+        updatedCount++;
+      }
+    } else {
+      const newItem: ScreeningQuestionItem = {
+        id: `q-local-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        question,
+        type: type || 'text',
+        options,
+        answer,
+        updatedAt: nowStr,
+      };
+      existingQuestions.push(newItem);
+      questionMap.set(key, newItem);
+      importedCount++;
+    }
+  }
+
+  await saveAllQuestionsToStorage(existingQuestions);
+  return {
+    importedCount,
+    updatedCount,
+    totalCount: existingQuestions.length,
+  };
+}
+
 export async function clearAllAppliedJobs(): Promise<void> {
   const filePath = getAppliedJobsFilePath();
   await safeWriteJsonFile(filePath, []);
