@@ -56,6 +56,80 @@ export function cleanupStaleProfileLocks(profilePath: string) {
   }
 }
 
+export function getProfilePath(): string {
+  const baseDir = process.env.APP_USER_DATA || process.cwd();
+  return path.join(baseDir, 'automation-profile');
+}
+
+/**
+ * Searches for the official Google Chrome executable in standard system locations across Windows, macOS, and Linux.
+ */
+export function findSystemChromePath(): string | null {
+  if (process.platform === 'win32') {
+    const candidates = [
+      process.env['LOCALAPPDATA'] ? path.join(process.env['LOCALAPPDATA'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+      process.env['PROGRAMFILES'] ? path.join(process.env['PROGRAMFILES'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+      process.env['PROGRAMFILES(X86)'] ? path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ].filter(Boolean);
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'darwin') {
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      path.join(process.env.HOME || '', 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'linux') {
+    const candidates = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/opt/google/chrome/chrome',
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * Automatically syncs the login profile from development folder to AppData if AppData profile is empty.
+ */
+export function syncProfileIfEmpty(): void {
+  const baseDir = process.env.APP_USER_DATA;
+  if (!baseDir) return;
+
+  const targetProfile = path.join(baseDir, 'automation-profile');
+  const candidateSources = [
+    path.join(process.cwd(), 'automation-profile'),
+    path.join('C:\\Users\\mieho\\Documents\\dev\\cv-blaster', 'automation-profile')
+  ];
+
+  for (const sourceProfile of candidateSources) {
+    if (fs.existsSync(sourceProfile) && path.resolve(sourceProfile) !== path.resolve(targetProfile)) {
+      const targetAccounts = path.join(targetProfile, 'Default', 'Accounts');
+      const sourceAccounts = path.join(sourceProfile, 'Default', 'Accounts');
+
+      if (!fs.existsSync(targetAccounts) && fs.existsSync(sourceAccounts)) {
+        try {
+          console.log(`[BrowserHelper] Menyalin profile login dari ${sourceProfile} ke AppData...`);
+          fs.cpSync(sourceProfile, targetProfile, { recursive: true, force: false });
+          console.log('[BrowserHelper] Berhasil menyalin profile login ke AppData!');
+          break;
+        } catch (e) {
+          console.error('[BrowserHelper] Gagal menyalin profile:', e);
+        }
+      }
+    }
+  }
+}
+
 /**
  * Launches Puppeteer browser with priority given to official Google Chrome (System Chrome)
  * and automatically falls back to bundled Chromium if Google Chrome fails or is unavailable.
@@ -82,7 +156,7 @@ export async function launchBrowserWithFallback(
         : (eval('require') as NodeRequire)('puppeteer-extra-plugin-stealth');
     } catch (fallbackErr: any) {
       const msg = `Gagal memuat modul otomatisasi (puppeteer-extra): ${err?.message || err}. Pastikan dependensi terpasang lengkap di instalasi aplikasi.`;
-      if (onLog) onLog(`🚨 ${msg}`);
+      if (onLog) onLog(`[ERROR] ${msg}`);
       throw new Error(msg);
     }
   }
@@ -91,9 +165,9 @@ export async function launchBrowserWithFallback(
     puppeteer.use(StealthPlugin());
   } catch (e) {}
 
+  syncProfileIfEmpty();
   const config = getConfig();
-  const baseDir = process.env.APP_USER_DATA || process.cwd();
-  const profilePath = path.join(baseDir, 'automation-profile');
+  const profilePath = getProfilePath();
   const isHeadless = mode !== 'headful';
 
   const log = onLog || console.log;
@@ -139,11 +213,11 @@ export async function launchBrowserWithFallback(
         errMsg.includes('ProcessSingleton') ||
         errMsg.includes('lockfile')
       ) {
-        log(`⚠️ Terdeteksi sesi browser lama masih aktif atau lockfile tertinggal. Membersihkan proses & me-reset lock...`);
+        log(`[WARN] Terdeteksi sesi browser lama masih aktif atau lockfile tertinggal. Membersihkan proses & me-reset lock...`);
         terminateOrphanedProfileProcesses(profilePath, log);
         await new Promise((r) => setTimeout(r, 1200));
         cleanupStaleProfileLocks(profilePath);
-        log(`🔄 Mencoba meluncurkan kembali ${label}...`);
+        log(`[INFO] Mencoba meluncurkan kembali ${label}...`);
         return await puppeteer.launch(options);
       }
       throw err;
@@ -156,27 +230,32 @@ export async function launchBrowserWithFallback(
   if (config.useSystemChrome !== false) {
     const customPath = config.customChromePath ? config.customChromePath.trim() : '';
     const isCustomPath = customPath.length > 0;
+    const systemChromePath = findSystemChromePath();
+    const finalChromePath = isCustomPath ? customPath : systemChromePath;
+
     const chromeOptions = {
       ...baseOptions,
-      ...(isCustomPath ? { executablePath: customPath } : { channel: 'chrome' })
+      ...(finalChromePath ? { executablePath: finalChromePath } : { channel: 'chrome' })
     };
 
     const targetLabel = isCustomPath
       ? `Google Chrome (${customPath})`
+      : finalChromePath
+      ? `Google Chrome Resmi (${finalChromePath})`
       : 'Google Chrome Resmi (System Chrome)';
 
     try {
-      log(`🌐 Mencoba meluncurkan ${targetLabel}...`);
+      log(`[INFO] Mencoba meluncurkan ${targetLabel}...`);
       const browser = await launchWithAutoRecovery(chromeOptions, targetLabel);
       const version = await browser.version().catch(() => 'Unknown');
-      log(`✅ Berhasil membuka ${targetLabel} [${version}]`);
+      log(`[SUCCESS] Berhasil membuka ${targetLabel} [${version}]`);
       return {
         browser,
         browserType: isCustomPath ? 'custom-chrome' : 'google-chrome'
       };
     } catch (chromeError: any) {
-      log(`⚠️ Gagal membuka ${targetLabel}: ${chromeError.message || chromeError}`);
-      log(`🔄 Beralih (fallback) menggunakan Chromium bawaan Puppeteer...`);
+      log(`[WARN] Gagal membuka ${targetLabel}: ${chromeError.message || chromeError}`);
+      log(`[INFO] Beralih (fallback) menggunakan Chromium bawaan Puppeteer...`);
       cleanupStaleProfileLocks(profilePath);
     }
   }
@@ -185,16 +264,16 @@ export async function launchBrowserWithFallback(
   // ATTEMPT 2: Fallback to Bundled Chromium
   // ----------------------------------------------------
   try {
-    log(`🌐 Meluncurkan Chromium Bawaan (Bundled Chromium)...`);
+    log(`[INFO] Meluncurkan Chromium Bawaan (Bundled Chromium)...`);
     const browser = await launchWithAutoRecovery(baseOptions, 'Chromium Bawaan');
     const version = await browser.version().catch(() => 'Unknown');
-    log(`✅ Berhasil membuka Chromium Bawaan [${version}]`);
+    log(`[SUCCESS] Berhasil membuka Chromium Bawaan [${version}]`);
     return {
       browser,
       browserType: 'chromium-bundled'
     };
   } catch (bundledError: any) {
-    log(`🚨 Gagal meluncurkan browser: ${bundledError.message || bundledError}`);
+    log(`[ERROR] Gagal meluncurkan browser: ${bundledError.message || bundledError}`);
     throw new Error(`Tidak dapat meluncurkan browser: ${bundledError.message || bundledError}`);
   }
 }
