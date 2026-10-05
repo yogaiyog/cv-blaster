@@ -629,7 +629,7 @@ export default function Home() {
       if (data.success) {
         setIsSetupBrowserRunning(!isSetupBrowserRunning);
         if (action === 'start') {
-          alert('Browser dibuka! Silakan login manual ke Glints dan Jobstreet, kemudian biarkan profil tersimpan.');
+          alert(data.message || 'Browser berhasil dibuka.');
         }
       } else {
         alert(data.error || 'Terjadi kesalahan saat memicu browser.');
@@ -747,7 +747,7 @@ export default function Home() {
                 : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'
             }`}
           >
-            {isSetupBrowserRunning ? 'Tutup Browser Setup' : 'Buka Browser (Login Setup)'}
+            {isSetupBrowserRunning ? 'Tutup Browser' : 'Buka Browser'}
           </button>
 
           {/* Bot Control Button */}

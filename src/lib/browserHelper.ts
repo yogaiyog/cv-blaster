@@ -99,6 +99,50 @@ export function findSystemChromePath(): string | null {
 }
 
 /**
+ * Searches for any available Chromium-based browser on the system
+ * (Google Chrome, Microsoft Edge, Brave, Chromium) for native launching without Puppeteer.
+ */
+export function findNativeBrowserPath(): string | null {
+  const chromePath = findSystemChromePath();
+  if (chromePath) return chromePath;
+
+  if (process.platform === 'win32') {
+    const edgeCandidates = [
+      process.env['PROGRAMFILES(X86)'] ? path.join(process.env['PROGRAMFILES(X86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+      process.env['PROGRAMFILES'] ? path.join(process.env['PROGRAMFILES'], 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+      process.env['LOCALAPPDATA'] ? path.join(process.env['LOCALAPPDATA'], 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    ].filter(Boolean);
+
+    for (const p of edgeCandidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'darwin') {
+    const macCandidates = [
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ];
+    for (const p of macCandidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'linux') {
+    const linuxCandidates = [
+      '/usr/bin/microsoft-edge',
+      '/usr/bin/microsoft-edge-stable',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+    ];
+    for (const p of linuxCandidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Automatically syncs the login profile from development folder to AppData if AppData profile is empty.
  */
 export function syncProfileIfEmpty(): void {
